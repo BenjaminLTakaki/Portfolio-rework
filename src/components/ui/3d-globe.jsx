@@ -41,6 +41,8 @@ function Marker({
   const [hovered, setHovered] = useState(false);
   const groupRef = useRef(null);
   const imageGroupRef = useRef(null);
+  const parentQuaternionRef = useRef(new THREE.Quaternion());
+  const cameraQuaternionRef = useRef(new THREE.Quaternion());
   const { camera } = useThree();
   const flagTexture = useTexture(marker.src);
 
@@ -83,7 +85,14 @@ function Marker({
 
     // Show marker only if it's facing the camera.
     groupRef.current.visible = dot > 0.08;
-    imageGroupRef.current.quaternion.copy(camera.quaternion);
+
+    // The marker lives inside the rotated globe group, so convert the
+    // camera-facing world rotation back into this marker's local space.
+    groupRef.current.parent.getWorldQuaternion(parentQuaternionRef.current);
+    cameraQuaternionRef.current.copy(camera.quaternion);
+    imageGroupRef.current.quaternion.copy(
+      parentQuaternionRef.current.invert().multiply(cameraQuaternionRef.current)
+    );
   });
 
   const handlePointerEnter = useCallback(() => {
@@ -113,13 +122,7 @@ function Marker({
   }, [surfacePosition, topPosition]);
 
   return (
-    <group
-      ref={groupRef}
-      rotation={[
-        config.initialRotation?.x ?? 0,
-        config.initialRotation?.y ?? 0,
-        config.initialRotation?.z ?? 0,
-      ]}>
+    <group ref={groupRef}>
       {/* Pin line from surface to image - properly oriented */}
       <mesh position={lineCenter} quaternion={lineQuaternion}>
         <cylinderGeometry args={[0.0025, 0.0025, lineHeight, 8]} />
@@ -187,7 +190,13 @@ function RotatingGlobe({
   }, [config.radius]);
 
   return (
-    <group ref={groupRef}>
+    <group
+      ref={groupRef}
+      rotation={[
+        config.initialRotation?.x ?? 0,
+        config.initialRotation?.y ?? 0,
+        config.initialRotation?.z ?? 0,
+      ]}>
       {/* Main globe mesh with Earth texture */}
       <mesh geometry={geometry}>
         <meshStandardMaterial
