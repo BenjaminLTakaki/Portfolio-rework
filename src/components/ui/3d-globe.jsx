@@ -39,26 +39,34 @@ function Marker({
   onHover
 }) {
   const [hovered, setHovered] = useState(false);
-  const [isVisible, setIsVisible] = useState(true);
   const groupRef = useRef(null);
   const imageGroupRef = useRef(null);
   const { camera } = useThree();
+  const flagTexture = useTexture(marker.src);
 
   // Surface position (where the line starts)
   const surfacePosition = useMemo(() => {
     return latLngToVector3(marker.lat, marker.lng, radius * 1.001);
   }, [marker.lat, marker.lng, radius]);
 
-  // Top of the line (where the image is) - positioned further out to prevent going inside globe
+  // Top of the line (where the image is)
   const topPosition = useMemo(() => {
-    return latLngToVector3(marker.lat, marker.lng, radius * 1.18);
+    return latLngToVector3(marker.lat, marker.lng, radius * 1.055);
   }, [marker.lat, marker.lng, radius]);
 
   const lineHeight = topPosition.distanceTo(surfacePosition);
+  const markerScale = hovered ? defaultSize * 1.2 : defaultSize;
+
+  useMemo(() => {
+    if (flagTexture) {
+      flagTexture.colorSpace = THREE.SRGBColorSpace;
+      flagTexture.anisotropy = 8;
+    }
+  }, [flagTexture]);
 
   // Check if marker is facing the camera
   useFrame(() => {
-    if (!imageGroupRef.current) return;
+    if (!groupRef.current || !imageGroupRef.current) return;
 
     // Get the world position of the image (the positioned element)
     const worldPos = new THREE.Vector3();
@@ -73,8 +81,9 @@ function Marker({
     // Dot product: positive means facing camera, negative means behind
     const dot = markerDirection.dot(cameraDirection);
 
-    // Show marker only if it's facing the camera (stricter threshold)
-    setIsVisible(dot > 0.1);
+    // Show marker only if it's facing the camera.
+    groupRef.current.visible = dot > 0.08;
+    imageGroupRef.current.quaternion.copy(camera.quaternion);
   });
 
   const handlePointerEnter = useCallback(() => {
@@ -104,50 +113,41 @@ function Marker({
   }, [surfacePosition, topPosition]);
 
   return (
-    <group ref={groupRef} visible={isVisible}>
+    <group
+      ref={groupRef}
+      rotation={[
+        config.initialRotation?.x ?? 0,
+        config.initialRotation?.y ?? 0,
+        config.initialRotation?.z ?? 0,
+      ]}>
       {/* Pin line from surface to image - properly oriented */}
       <mesh position={lineCenter} quaternion={lineQuaternion}>
-        <cylinderGeometry args={[0.003, 0.003, lineHeight, 8]} />
+        <cylinderGeometry args={[0.0025, 0.0025, lineHeight, 8]} />
         <meshBasicMaterial
-          color={hovered ? "#ffffff" : "#94a3b8"}
+          color={hovered ? "#f4efe6" : "#9d9485"}
           transparent
-          opacity={hovered ? 0.9 : 0.6} />
+          opacity={hovered ? 0.9 : 0.5} />
       </mesh>
       {/* Pin point at the surface */}
       <mesh position={surfacePosition} quaternion={lineQuaternion}>
-        <coneGeometry args={[0.015, 0.04, 8]} />
-        <meshBasicMaterial color={hovered ? "#f97316" : "#ef4444"} />
+        <coneGeometry args={[0.013, 0.035, 8]} />
+        <meshBasicMaterial color={hovered ? "#d8c66f" : "#b25044"} />
       </mesh>
-      {/* Circular image at the top */}
-      <group ref={imageGroupRef} position={topPosition}>
-        <Html
-          transform
-          center
-          style={{
-            pointerEvents: isVisible ? "auto" : "none",
-            opacity: isVisible ? 1 : 0,
-            transition: "opacity 0.15s ease-out",
-          }}>
-          <div
-            className={cn(
-              "cursor-pointer overflow-hidden rounded-full bg-neutral-900 shadow-lg transition-transform duration-200",
-              hovered && "scale-125 shadow-xl ring-1 ring-white/50"
-            )}
-            style={{
-              width: "8px",
-              height: "8px",
-            }}
-            onMouseEnter={handlePointerEnter}
-            onMouseLeave={handlePointerLeave}
-            onClick={handleClick}>
-            <img
-              src={marker.src}
-              alt={marker.label || "Marker"}
-              className="h-full w-full object-cover"
-              draggable={false} />
-          </div>
-        </Html>
-      </group>
+      {/* Native 3D flag marker, pinned to the globe instead of floating as DOM. */}
+      <mesh
+        ref={imageGroupRef}
+        position={topPosition}
+        scale={[markerScale * 1.42, markerScale, 1]}
+        onPointerEnter={handlePointerEnter}
+        onPointerLeave={handlePointerLeave}
+        onClick={handleClick}>
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial
+          map={flagTexture}
+          transparent
+          side={THREE.DoubleSide}
+          toneMapped={false} />
+      </mesh>
     </group>
   );
 }
@@ -359,8 +359,8 @@ const defaultConfig = {
   enablePan: false,
   minDistance: 5,
   maxDistance: 15,
-  initialRotation: { x: 0, y: 0 },
-  markerSize: 0.06,
+  initialRotation: { x: 0, y: -1.25 },
+  markerSize: 0.14,
   showWireframe: false,
   wireframeColor: "#4a9eff",
   ambientIntensity: 0.6,

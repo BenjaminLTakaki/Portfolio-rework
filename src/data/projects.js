@@ -140,7 +140,7 @@ export const places = [
   {
     name: "Bangkok",
     country: "Thailand",
-    years: "Born / 1998",
+    years: "Born / 2005",
     lat: 13.7563,
     lon: 100.5018,
   },
