@@ -123,8 +123,6 @@ function Marker({
         <Html
           transform
           center
-          sprite
-          distanceFactor={10}
           style={{
             pointerEvents: isVisible ? "auto" : "none",
             opacity: isVisible ? 1 : 0,
@@ -386,8 +384,9 @@ export function Globe3D({
           antialias: true,
           alpha: true,
           powerPreference: "high-performance",
+          precision: "highp",
         }}
-        dpr={[1, 2]}
+        dpr={Math.min(window.devicePixelRatio, 2)}
         camera={{
           fov: 45,
           near: 0.1,
