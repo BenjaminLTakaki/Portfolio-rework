@@ -31,6 +31,7 @@ export const projects = [
     title: "Spotify Cover Generator",
     category: "Generative AI / Full-Stack",
     year: "2024",
+    url: "/spotifycovergenerator",
     cover: "/project-images/spotify-cover-generator.png",
     logo: {
       code: "SC",

@@ -34,6 +34,15 @@ export default function ProjectPage() {
               <span className="text-ink font-medium">{project.metric}</span>
             </p>
           )}
+          {project.url && (
+            <Link
+              to={project.url}
+              className="mt-8 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted border border-ink/20 px-4 py-2.5 transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:text-ink hover:border-ink/40"
+            >
+              View Live
+              <span className="text-base leading-none">{"->"}</span>
+            </Link>
+          )}
         </div>
         <div className="lg:translate-y-6">
           <ProjectMark project={project} />
