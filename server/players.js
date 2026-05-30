@@ -19,6 +19,14 @@ export const PLAYERS = {
     tagLine: "GOAT",
     role: "JUNGLE",
   },
+  imout: {
+    key: "imout",
+    name: "Imout",
+    riotId: "Imout#999",
+    gameName: "Imout",
+    tagLine: "999",
+    role: "JUNGLE",
+  },
 };
 
 export function getPlayer(key) {

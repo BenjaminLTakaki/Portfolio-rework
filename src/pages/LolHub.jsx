@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 const PLAYERS = [
   { key: "ben", name: "Ben", riotId: "NoAnimeNoLife#ANIME", role: "Top lane" },
   { key: "raf", name: "Raf", riotId: "FrogChango#GOAT", role: "Jungle" },
+  { key: "imout", name: "Imout", riotId: "Imout#999", role: "Jungle" },
 ];
 
 export default function LolHub() {
