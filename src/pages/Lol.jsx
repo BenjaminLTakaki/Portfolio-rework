@@ -1,82 +1,89 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   computeStats,
   championBreakdown,
   detectStreaks,
   recentForm,
   timeOfDay,
-  topLaneAnalysis,
+  roleMatchupAnalysis,
+  jungleStats,
   tierProgression,
   championSynergy,
 } from "../lib/lolAnalysis";
 
-const RIOT_ID = "NoAnimeNoLife#ANIME";
-
 export default function Lol() {
+  const { player: playerKey } = useParams();
+  const [player, setPlayer] = useState(null);
   const [matches, setMatches] = useState(null);
-  const [topGames, setTopGames] = useState([]);
+  const [roleMatchups, setRoleMatchups] = useState([]);
   const [matchTeams, setMatchTeams] = useState([]);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch("/api/lol/dashboard")
+    setMatches(null);
+    setError(null);
+    fetch(`/api/lol/${playerKey}/dashboard`)
       .then((r) => {
+        if (r.status === 404) throw new Error(`unknown player “${playerKey}”`);
         if (!r.ok) throw new Error("dashboard API unavailable");
         return r.json();
       })
-      .then(({ matches: m, topGames: t, matchTeams: mt }) => {
+      .then(({ player: p, matches: m, roleMatchups: rm, matchTeams: mt }) => {
+        setPlayer(p);
         setMatches(m);
-        setTopGames(t || []);
+        setRoleMatchups(rm || []);
         setMatchTeams(mt || []);
       })
       .catch((e) => setError(e.message));
-  }, []);
+  }, [playerKey]);
 
   const data = useMemo(() => {
-    if (!matches || matches.length === 0) return null;
+    if (!matches || matches.length === 0 || !player) return null;
     return {
       stats: computeStats(matches),
       champs: championBreakdown(matches),
       streaks: detectStreaks(matches),
       form: recentForm(matches),
       time: timeOfDay(matches),
-      top: topLaneAnalysis(topGames),
+      roles: roleMatchupAnalysis(roleMatchups, player.role),
+      jungle: player.role === "JUNGLE" ? jungleStats(matches) : null,
       progression: tierProgression(matches),
       synergy: championSynergy(matchTeams),
     };
-  }, [matches, topGames, matchTeams]);
+  }, [matches, roleMatchups, matchTeams, player]);
 
   if (error) return <Centered>Couldn’t load match data — {error}</Centered>;
   if (!data) return <Centered>Loading match history…</Centered>;
 
-  const { stats, champs, streaks, form, time, top, progression, synergy } = data;
+  const { stats, champs, streaks, form, time, roles, jungle, progression, synergy } = data;
+  const isJungle = player.role === "JUNGLE";
 
   return (
     <main className="pt-28 pb-24 px-6 lg:px-12 max-w-screen-xl mx-auto animate-fade-up">
       <Link
-        to="/"
+        to="/lol"
         className="mb-14 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:text-ink"
       >
         <span className="text-base leading-none">←</span>
-        Back
+        All players
       </Link>
 
       {/* Header */}
       <header className="mb-16">
         <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.26em] text-ink-muted">
-          League of Legends / Ranked Solo&nbsp;&amp;&nbsp;Duo
+          League of Legends / Ranked Solo&nbsp;&amp;&nbsp;Duo · {titleCase(player.role)}
         </p>
         <h1 className="max-w-[14ch] text-[clamp(2.4rem,6.5vw,5.6rem)] font-light tracking-[-0.055em] leading-[0.9] text-ink">
-          Ranked, in numbers.
+          {player.name}, in numbers.
         </h1>
         <p className="mt-6 max-w-prose text-sm leading-[1.75] text-ink-muted">
-          A self-updating dashboard built from my full Ranked match history via the
-          Riot API. {stats.total} games analysed — from{" "}
+          A self-updating dashboard built from {player.name}’s full Ranked match
+          history via the Riot API. {stats.total} games analysed — from{" "}
           <span className="text-ink">{shortDate(stats.oldest.date_utc)}</span> to{" "}
           <span className="text-ink">{shortDate(stats.newest.date_utc)}</span>.
         </p>
-        <p className="mt-3 font-mono text-[11px] text-ink-faint">{RIOT_ID}</p>
+        <p className="mt-3 font-mono text-[11px] text-ink-faint">{player.riotId}</p>
       </header>
 
       {/* Headline stats */}
@@ -179,33 +186,66 @@ export default function Lol() {
         </div>
       )}
 
-      {/* Top lane */}
-      {top && (
+      {/* Jungle metrics — only for junglers */}
+      {isJungle && jungle && (
         <>
-          <SectionLabel>Top lane · ranged vs melee matchups</SectionLabel>
-          <div className="mb-6 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-ink/[0.1] bg-ink/[0.1] sm:grid-cols-3">
-            <Stat label="Top lane games" value={top.total} sub={`${top.winrate.toFixed(0)}% overall WR`} />
+          <SectionLabel>Jungle · pathing &amp; objectives</SectionLabel>
+          <div className="mb-20 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-ink/[0.1] bg-ink/[0.1] lg:grid-cols-5">
+            <Stat label="CS / min" value={jungle.csPerMin.toFixed(1)} sub={`${jungle.jungleCsPerMin.toFixed(1)} jungle`} />
+            <Stat label="Avg vision" value={jungle.avgVision.toFixed(0)} sub="score / game" />
+            <Stat label="First blood" value={`${jungle.firstBloodRate.toFixed(0)}%`} sub="of games" />
+            <Stat label="Objectives stolen" value={jungle.objectivesStolen} sub={`${jungle.games} games`} />
             <Stat
-              label="vs Ranged"
-              value={`${top.ranged.winrate.toFixed(0)}%`}
-              sub={`${top.ranged.wins}W / ${top.ranged.games - top.ranged.wins}L · ${top.ranged.games}g`}
-            />
-            <Stat
-              label="vs Melee"
-              value={`${top.melee.winrate.toFixed(0)}%`}
-              sub={`${top.melee.wins}W / ${top.melee.games - top.melee.wins}L · ${top.melee.games}g`}
+              label="Epic takedowns"
+              value={(jungle.dragonsPerGame + jungle.baronsPerGame).toFixed(1)}
+              sub="drakes+barons / game"
             />
           </div>
-          {top.topRanged.length > 0 && (
-            <div className="mb-20 space-y-4">
-              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
-                Most-faced ranged tops
-              </p>
-              {top.topRanged.map((c) => (
-                <BarRow key={c.champion} label={c.champion} winrate={c.winrate} games={c.games} max={top.topRanged[0].games} />
-              ))}
+        </>
+      )}
+
+      {/* Role matchups — top lane (ranged/melee) or jungle (enemy jungler) */}
+      {roles && (
+        <>
+          <SectionLabel>
+            {isJungle
+              ? "Jungle · enemy jungler matchups"
+              : "Top lane · ranged vs melee matchups"}
+          </SectionLabel>
+          {!isJungle && (
+            <div className="mb-6 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-ink/[0.1] bg-ink/[0.1] sm:grid-cols-3">
+              <Stat label="Top lane games" value={roles.total} sub={`${roles.winrate.toFixed(0)}% overall WR`} />
+              <Stat
+                label="vs Ranged"
+                value={`${roles.ranged.winrate.toFixed(0)}%`}
+                sub={`${roles.ranged.wins}W / ${roles.ranged.games - roles.ranged.wins}L · ${roles.ranged.games}g`}
+              />
+              <Stat
+                label="vs Melee"
+                value={`${roles.melee.winrate.toFixed(0)}%`}
+                sub={`${roles.melee.wins}W / ${roles.melee.games - roles.melee.wins}L · ${roles.melee.games}g`}
+              />
             </div>
           )}
+          {isJungle && (
+            <div className="mb-6 grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-ink/[0.1] bg-ink/[0.1] sm:grid-cols-1">
+              <Stat label="Jungle games" value={roles.total} sub={`${roles.winrate.toFixed(0)}% overall WR`} />
+            </div>
+          )}
+          {(() => {
+            const list = isJungle ? roles.topEnemies : roles.topEnemiesRanged;
+            if (!list.length) return null;
+            return (
+              <div className="mb-20 space-y-4">
+                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+                  {isJungle ? "Most-faced enemy junglers" : "Most-faced ranged tops"}
+                </p>
+                {list.map((c) => (
+                  <BarRow key={c.champion} label={c.champion} winrate={c.winrate} games={c.games} max={list[0].games} />
+                ))}
+              </div>
+            );
+          })()}
         </>
       )}
 
@@ -354,6 +394,12 @@ function HourBar({ hour }) {
 
 function pad(n) {
   return String(n).padStart(2, "0");
+}
+
+// "JUNGLE" -> "Jungle"
+function titleCase(s) {
+  if (!s) return "";
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
 
 // "Tuesday, 30 September 2025 at 14:11 UTC" -> "30 Sep 2025"

@@ -15,8 +15,9 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import cron from "node-cron";
 
-import { sql, ensureSchema, getMatches, getTopGames, getMatchTeams } from "./db.js";
+import { sql, ensureSchema, getMatches, getRoleMatchups, getMatchTeams } from "./db.js";
 import { refreshFromRiot } from "./riot.js";
+import { PLAYERS, publicPlayer } from "./players.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, "..", "dist");
@@ -35,14 +36,19 @@ app.get("/api/health", async (_req, res) => {
   }
 });
 
-app.get("/api/lol/dashboard", async (_req, res) => {
+app.get("/api/lol/:player/dashboard", async (req, res) => {
+  const key = req.params.player;
+  const player = publicPlayer(key);
+  if (!player) {
+    return res.status(404).json({ error: `Unknown player: ${key}` });
+  }
   try {
-    const [matches, topGames, matchTeams] = await Promise.all([
-      getMatches(),
-      getTopGames(),
-      getMatchTeams(),
+    const [matches, roleMatchups, matchTeams] = await Promise.all([
+      getMatches(key),
+      getRoleMatchups(key),
+      getMatchTeams(key),
     ]);
-    res.json({ matches, topGames, matchTeams });
+    res.json({ player, matches, roleMatchups, matchTeams });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
   }
@@ -62,12 +68,14 @@ app.use((req, res, next) => {
 // --- Daily refresh ---------------------------------------------------------
 
 async function runRefresh(label) {
-  try {
-    const added = await refreshFromRiot();
-    console.log(`[cron] ${label}: +${added} match(es).`);
-  } catch (err) {
-    // Never let a Riot/API hiccup crash the server.
-    console.error(`[cron] ${label} failed:`, err.message || err);
+  for (const key of Object.keys(PLAYERS)) {
+    try {
+      const added = await refreshFromRiot(key);
+      console.log(`[cron] ${label} ${key}: +${added} match(es).`);
+    } catch (err) {
+      // Never let a Riot/API hiccup crash the server.
+      console.error(`[cron] ${label} ${key} failed:`, err.message || err);
+    }
   }
 }
 

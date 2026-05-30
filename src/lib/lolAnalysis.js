@@ -167,35 +167,75 @@ export function timeOfDay(matches, minGames = 10) {
   return { hourly, parts, best, worst, minGames };
 }
 
-// --- top lane (ranged vs melee) ------------------------------------------
+// --- role matchups (enemy in your own role) ------------------------------
+// Generic over role. For TOP we surface the ranged-vs-melee split (a real
+// top-lane dynamic); for any role we surface the most-faced enemy champions
+// in that role with your win rate against each.
 
-export function topLaneAnalysis(topGames) {
-  const total = topGames.length;
-  if (total === 0) return null;
-
-  const vsRanged = topGames.filter((g) => g.enemy_is_ranged);
-  const vsMelee = topGames.filter((g) => !g.enemy_is_ranged);
-
-  const wr = (arr) => (arr.length ? (arr.filter((g) => g.win).length / arr.length) * 100 : 0);
-
-  const enemyCounts = new Map();
-  for (const g of vsRanged) {
-    const e = enemyCounts.get(g.enemy_top) || { champion: g.enemy_top, games: 0, wins: 0 };
+function countEnemies(arr) {
+  const map = new Map();
+  for (const g of arr) {
+    const champ = g.enemy_champion || "Unknown";
+    const e = map.get(champ) || { champion: champ, games: 0, wins: 0 };
     e.games += 1;
     if (g.win) e.wins += 1;
-    enemyCounts.set(g.enemy_top, e);
+    map.set(champ, e);
   }
-  const topRanged = [...enemyCounts.values()]
+  return [...map.values()]
     .map((e) => ({ ...e, winrate: (e.wins / e.games) * 100 }))
     .sort((a, b) => b.games - a.games)
     .slice(0, 8);
+}
+
+export function roleMatchupAnalysis(matchups, role) {
+  const total = matchups.length;
+  if (total === 0) return null;
+
+  const wr = (arr) => (arr.length ? (arr.filter((g) => g.win).length / arr.length) * 100 : 0);
+  const vsRanged = matchups.filter((g) => g.enemy_is_ranged);
+  const vsMelee = matchups.filter((g) => !g.enemy_is_ranged);
 
   return {
+    role,
     total,
-    winrate: wr(topGames),
+    winrate: wr(matchups),
     ranged: { games: vsRanged.length, wins: vsRanged.filter((g) => g.win).length, winrate: wr(vsRanged) },
     melee: { games: vsMelee.length, wins: vsMelee.filter((g) => g.win).length, winrate: wr(vsMelee) },
-    topRanged,
+    topEnemies: countEnemies(matchups), // most-faced enemy in your role
+    topEnemiesRanged: countEnemies(vsRanged), // most-faced ranged enemy (top lane)
+  };
+}
+
+// --- jungle metrics ------------------------------------------------------
+// Aggregates the jungle-relevant fields captured per match. Returns null if no
+// match carries metric data (e.g. a player whose history predates the columns).
+
+export function jungleStats(matches) {
+  const withData = matches.filter((m) => m.jungle_cs != null || m.cs != null);
+  const n = withData.length;
+  if (n === 0) return null;
+
+  let csSum = 0, jgSum = 0, durSum = 0, vision = 0, fb = 0, steals = 0, dragons = 0, barons = 0;
+  for (const m of withData) {
+    csSum += m.cs || 0;
+    jgSum += m.jungle_cs || 0;
+    durSum += m.duration_mins || 0;
+    vision += m.vision_score || 0;
+    if (m.first_blood) fb += 1;
+    steals += m.objectives_stolen || 0;
+    dragons += m.dragon_kills || 0;
+    barons += m.baron_kills || 0;
+  }
+
+  return {
+    games: n,
+    csPerMin: durSum ? csSum / durSum : 0,
+    jungleCsPerMin: durSum ? jgSum / durSum : 0,
+    avgVision: vision / n,
+    firstBloodRate: (fb / n) * 100,
+    objectivesStolen: steals,
+    dragonsPerGame: dragons / n,
+    baronsPerGame: barons / n,
   };
 }
 

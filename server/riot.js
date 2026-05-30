@@ -1,17 +1,16 @@
-// Riot API client — Node port of the old LEAGUE_SCRIPTS/update_data.py +
-// riot_common.py. Does an incremental fetch: resolve PUUID, page the most
-// recent ranked match IDs, and for each match not already in Neon, fetch the
-// full detail ONCE and upsert the slim match row, the top-lane row (when you
-// played TOP), and the ally/enemy team comp.
+// Riot API client. Fetches ranked match data for a configured player and upserts
+// the slim match row (incl. jungle metrics), the role matchup (enemy in the
+// player's role), and the ally/enemy team comp into Neon.
 //
-// Uses native fetch (Node 18+). No third-party HTTP client needed.
+// Uses native fetch (Node 18+).
 
 import {
   upsertMatch,
-  upsertTopGame,
+  upsertRoleMatchup,
   upsertMatchTeam,
   existingMatchIds,
 } from "./db.js";
+import { getPlayer } from "./players.js";
 
 const REGIONAL_HOST = "https://europe.api.riotgames.com";
 const QUEUE_RANKED = 420;
@@ -19,32 +18,28 @@ const PAGE_SIZE = 100;
 const RECENT_LOOKBACK = 200; // a daily run only needs the most recent games
 const DEFAULT_RETRY_MS = 10_000;
 
-// Champions commonly played as ranged tops (kept in sync with the old
-// top_lane_analysis / update_data.py set).
-const RANGED_TOP_CHAMPS = new Set([
+// Champions commonly played as ranged in lane/jungle. Used to flag the enemy
+// matchup as ranged vs melee (most relevant for top lane, kept generic).
+const RANGED_CHAMPS = new Set([
   "Teemo", "Vayne", "Quinn", "Kennen", "Gnar", "Kayle", "Jayce",
   "Gangplank", "Vladimir", "Heimerdinger", "Ryze", "Karma", "Lissandra",
   "Akshan", "Cassiopeia", "Graves", "Lucian", "Ezreal", "Smolder",
   "Hwei", "Zoe", "Viktor", "Orianna", "Syndra", "Azir", "Corki",
-  "Tristana", "Caitlyn", "Ashe", "Jhin", "Senna",
+  "Tristana", "Caitlyn", "Ashe", "Jhin", "Senna", "Kindred",
 ]);
 
-function creds() {
-  const apiKey = (process.env.RIOT_API_KEY || "").trim();
-  if (!apiKey) throw new Error("RIOT_API_KEY is not set.");
-  return {
-    apiKey,
-    gameName: (process.env.RIOT_GAME_NAME || "NoAnimeNoLife").trim(),
-    tagLine: (process.env.RIOT_TAG_LINE || "ANIME").trim(),
-  };
+function apiKey() {
+  const key = (process.env.RIOT_API_KEY || "").trim();
+  if (!key) throw new Error("RIOT_API_KEY is not set.");
+  return key;
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // GET with automatic rate-limit retry via the Retry-After header.
-async function riotGet(url, apiKey) {
+async function riotGet(url, key) {
   while (true) {
-    const res = await fetch(url, { headers: { "X-Riot-Token": apiKey } });
+    const res = await fetch(url, { headers: { "X-Riot-Token": key } });
 
     if (res.ok) return res.json();
 
@@ -67,21 +62,21 @@ async function riotGet(url, apiKey) {
   }
 }
 
-async function getPuuid(gameName, tagLine, apiKey) {
+async function getPuuid(gameName, tagLine, key) {
   const url = `${REGIONAL_HOST}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(
     gameName
   )}/${encodeURIComponent(tagLine)}`;
-  const data = await riotGet(url, apiKey);
+  const data = await riotGet(url, key);
   return data.puuid;
 }
 
-// Newest-first ranked match IDs, up to ~RECENT_LOOKBACK.
-async function getRecentMatchIds(puuid, apiKey) {
+// Ranked match IDs, newest-first. limit=null pages the FULL history.
+async function getMatchIds(puuid, key, limit = RECENT_LOOKBACK) {
   const ids = [];
   let start = 0;
-  while (ids.length < RECENT_LOOKBACK) {
+  while (limit === null || ids.length < limit) {
     const url = `${REGIONAL_HOST}/lol/match/v5/matches/by-puuid/${puuid}/ids?queue=${QUEUE_RANKED}&start=${start}&count=${PAGE_SIZE}`;
-    const page = await riotGet(url, apiKey);
+    const page = await riotGet(url, key);
     if (!page.length) break;
     ids.push(...page);
     if (page.length < PAGE_SIZE) break;
@@ -91,7 +86,7 @@ async function getRecentMatchIds(puuid, apiKey) {
 }
 
 function utcDateString(tsMs) {
-  // e.g. "Tuesday, 30 September 2025 at 14:11 UTC" — mirrors the Python format.
+  // e.g. "Tuesday, 30 September 2025 at 14:11 UTC"
   const d = new Date(tsMs);
   const date = new Intl.DateTimeFormat("en-GB", {
     weekday: "long", day: "2-digit", month: "long", year: "numeric",
@@ -120,26 +115,36 @@ function extractMatch(raw, puuid) {
     kills: p.kills,
     deaths: p.deaths,
     assists: p.assists,
+    // Jungle / general metrics
+    cs: (p.totalMinionsKilled ?? 0) + (p.neutralMinionsKilled ?? 0),
+    jungle_cs: p.neutralMinionsKilled ?? 0,
+    vision_score: p.visionScore ?? 0,
+    dragon_kills: p.dragonKills ?? 0,
+    baron_kills: p.baronKills ?? 0,
+    first_blood: Boolean(p.firstBloodKill || p.firstBloodAssist),
+    objectives_stolen: p.objectivesStolen ?? 0,
   };
 }
 
-function extractTopInfo(raw, puuid) {
+// Enemy champion in the player's own role (TOP -> enemy top, JUNGLE -> enemy jg).
+function extractRoleMatchup(raw, puuid, role) {
   const info = raw.info;
   const me = info.participants.find((x) => x.puuid === puuid);
-  if (!me || (me.teamPosition || "").toUpperCase() !== "TOP") return null;
+  if (!me || (me.teamPosition || "").toUpperCase() !== role) return null;
 
-  const enemyTop = info.participants.find(
-    (x) => x.teamId !== me.teamId && (x.teamPosition || "").toUpperCase() === "TOP"
+  const enemy = info.participants.find(
+    (x) => x.teamId !== me.teamId && (x.teamPosition || "").toUpperCase() === role
   );
-  const enemyChamp = enemyTop ? enemyTop.championName : "Unknown";
+  const enemyChamp = enemy ? enemy.championName : "Unknown";
 
   return {
     match_id: raw.metadata.matchId,
     date_utc: utcDateString(info.gameCreation),
     win: me.win,
     your_champion: me.championName,
-    enemy_top: enemyChamp,
-    enemy_is_ranged: RANGED_TOP_CHAMPS.has(enemyChamp),
+    role,
+    enemy_champion: enemyChamp,
+    enemy_is_ranged: RANGED_CHAMPS.has(enemyChamp),
   };
 }
 
@@ -161,38 +166,54 @@ function extractTeams(raw, puuid) {
   };
 }
 
-// Incremental refresh. Returns the number of new matches stored.
-export async function refreshFromRiot() {
-  const { apiKey, gameName, tagLine } = creds();
+// Core fetch loop shared by incremental refresh and full back-fill.
+async function fetchInto(playerKey, idLimit) {
+  const player = getPlayer(playerKey);
+  if (!player) throw new Error(`Unknown player: ${playerKey}`);
 
-  const puuid = await getPuuid(gameName, tagLine, apiKey);
-  const recentIds = await getRecentMatchIds(puuid, apiKey);
-  const known = await existingMatchIds();
-  const newIds = recentIds.filter((id) => !known.has(id));
+  const key = apiKey();
+  const puuid = await getPuuid(player.gameName, player.tagLine, key);
+  const ids = await getMatchIds(puuid, key, idLimit);
+  const known = await existingMatchIds(playerKey);
+  const newIds = ids.filter((id) => !known.has(id));
 
   if (!newIds.length) {
-    console.log("[refresh] no new matches.");
+    console.log(`[${playerKey}] no new matches.`);
     return 0;
   }
 
-  console.log(`[refresh] fetching ${newIds.length} new match(es)…`);
+  console.log(`[${playerKey}] fetching ${newIds.length} new match(es)…`);
 
   let added = 0;
   // Oldest new match first, so stored order stays chronological-ish.
   for (const id of newIds.reverse()) {
-    const raw = await riotGet(`${REGIONAL_HOST}/lol/match/v5/matches/${id}`, apiKey);
+    const raw = await riotGet(`${REGIONAL_HOST}/lol/match/v5/matches/${id}`, key);
 
     const slim = extractMatch(raw, puuid);
     if (slim) {
-      await upsertMatch(slim);
+      await upsertMatch(playerKey, slim);
       added += 1;
     }
-    const top = extractTopInfo(raw, puuid);
-    if (top) await upsertTopGame(top);
+    const matchup = extractRoleMatchup(raw, puuid, player.role);
+    if (matchup) await upsertRoleMatchup(playerKey, matchup);
     const teams = extractTeams(raw, puuid);
-    if (teams) await upsertMatchTeam(teams);
+    if (teams) await upsertMatchTeam(playerKey, teams);
+
+    if (added % 25 === 0 && added > 0) {
+      console.log(`  [${playerKey}] …${added} stored`);
+    }
   }
 
-  console.log(`[refresh] added ${added} match(es).`);
+  console.log(`[${playerKey}] added ${added} match(es).`);
   return added;
+}
+
+// Incremental refresh (recent games only) — used by the daily cron.
+export function refreshFromRiot(playerKey) {
+  return fetchInto(playerKey, RECENT_LOOKBACK);
+}
+
+// Full history back-fill — used once when adding a new player.
+export function backfillPlayer(playerKey) {
+  return fetchInto(playerKey, null);
 }
