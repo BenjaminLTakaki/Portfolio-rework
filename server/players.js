@@ -19,9 +19,9 @@ export const PLAYERS = {
     tagLine: "GOAT",
     role: "JUNGLE",
   },
-  imout: {
-    key: "imout",
-    name: "Imout",
+  jack: {
+    key: "jack",
+    name: "Jack",
     riotId: "Imout#999",
     gameName: "Imout",
     tagLine: "999",
