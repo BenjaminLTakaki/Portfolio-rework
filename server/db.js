@@ -69,10 +69,19 @@ export async function ensureSchema() {
 // Reads (oldest -> newest, matching the old JSON ordering)
 // ---------------------------------------------------------------------------
 
+// Postgres bigint columns come back from the driver as strings (to avoid
+// precision loss). The frontend expects `timestamp` to be a JS number (as the
+// old JSON was), so coerce it here at the boundary.
+function numberTimestamp(rows) {
+  for (const r of rows) r.timestamp = Number(r.timestamp);
+  return rows;
+}
+
 export async function getMatches() {
-  return sql`SELECT match_id, timestamp, date_utc, duration_mins, champion,
+  const rows = await sql`SELECT match_id, timestamp, date_utc, duration_mins, champion,
                     tier, division, win, kills, deaths, assists
              FROM matches ORDER BY timestamp ASC`;
+  return numberTimestamp(rows);
 }
 
 export async function getTopGames() {
@@ -81,8 +90,9 @@ export async function getTopGames() {
 }
 
 export async function getMatchTeams() {
-  return sql`SELECT match_id, timestamp, win, you, allies, enemies
+  const rows = await sql`SELECT match_id, timestamp, win, you, allies, enemies
              FROM match_teams ORDER BY timestamp ASC`;
+  return numberTimestamp(rows);
 }
 
 // ---------------------------------------------------------------------------
