@@ -27,10 +27,5 @@ dist-ssr
 .claude/settings.local.json
 .codex/config.toml
 
-# Secrets / Python
+# Secrets
 .env
-LEAGUE_SCRIPTS/.env
-__pycache__/
-*.pyc
-.venv/
-venv/
