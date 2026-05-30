@@ -6,7 +6,6 @@ export default function ProjectCard({ project, index }) {
     <Link
       to={`/project/${project.id}`}
       className="group grid grid-cols-1 gap-6 border-t border-ink/[0.08] py-8 transition-colors duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:border-ink/20 md:grid-cols-[minmax(220px,0.72fr)_minmax(0,1.28fr)_auto]"
-      style={{ animationDelay: `${index * 60}ms` }}
     >
       <ProjectMark project={project} />
 

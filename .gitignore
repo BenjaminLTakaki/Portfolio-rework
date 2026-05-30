@@ -26,3 +26,11 @@ dist-ssr
 # Project specific
 .claude/settings.local.json
 .codex/config.toml
+
+# Secrets / Python
+.env
+LEAGUE_SCRIPTS/.env
+__pycache__/
+*.pyc
+.venv/
+venv/

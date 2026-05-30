@@ -17,7 +17,7 @@ export default function ProjectPage() {
         to="/"
         className="mb-16 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:text-ink"
       >
-        <span className="text-base leading-none">{"<-"}</span>
+        <span className="text-base leading-none">←</span>
         All projects
       </Link>
 
@@ -40,7 +40,7 @@ export default function ProjectPage() {
               className="mt-8 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted border border-ink/20 px-4 py-2.5 transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:text-ink hover:border-ink/40"
             >
               View Live
-              <span className="text-base leading-none">{"->"}</span>
+              <span className="text-base leading-none">→</span>
             </Link>
           )}
         </div>
@@ -102,7 +102,7 @@ export default function ProjectPage() {
         {prev ? (
           <Link to={`/project/${prev.id}`} className="group flex flex-col gap-1.5">
             <span className="font-mono text-[11px] uppercase tracking-widest text-ink-faint">
-              {"<- Prev"}
+              ← Prev
             </span>
             <span className="text-sm font-medium text-ink transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:text-ink-muted">
               {prev.title}
@@ -117,7 +117,7 @@ export default function ProjectPage() {
             className="group flex flex-col gap-1.5 text-right"
           >
             <span className="font-mono text-[11px] uppercase tracking-widest text-ink-faint">
-              {"Next ->"}
+              Next →
             </span>
             <span className="text-sm font-medium text-ink transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:text-ink-muted">
               {next.title}

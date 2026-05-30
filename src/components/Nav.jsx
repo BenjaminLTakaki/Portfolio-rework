@@ -1,8 +1,19 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 export default function Nav() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const isHome = pathname === "/";
+
+  const handleAbout = (e) => {
+    e.preventDefault();
+    if (isHome) {
+      document.getElementById("about")?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      sessionStorage.setItem("scrollTo", "about");
+      navigate("/");
+    }
+  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-bg/80 backdrop-blur-md border-b border-ink/[0.05]">
@@ -23,12 +34,12 @@ export default function Nav() {
           >
             Projects
           </Link>
-          <a
-            href="/#about"
+          <button
+            onClick={handleAbout}
             className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted hover:text-ink transition-colors"
           >
             About
-          </a>
+          </button>
           <a
             href="mailto:bentakaki7@gmail.com"
             className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted hover:text-ink transition-colors"

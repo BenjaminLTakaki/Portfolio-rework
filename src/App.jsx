@@ -3,6 +3,7 @@ import Nav from "./components/Nav";
 import Home from "./pages/Home";
 import ProjectPage from "./pages/ProjectPage";
 import SpotifyRedirect from "./pages/SpotifyRedirect";
+import Lol from "./pages/Lol";
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/project/:id" element={<ProjectPage />} />
         <Route path="/spotifycovergenerator" element={<SpotifyRedirect />} />
+        <Route path="/lol" element={<Lol />} />
       </Routes>
     </>
   );

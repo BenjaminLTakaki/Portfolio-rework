@@ -1,0 +1,52 @@
+name: Update League data
+
+# Fetches new Ranked matches from the Riot API once a day and commits the
+# refreshed JSON under public/lol/. Pushing to main triggers Render's
+# auto-deploy, so the /lol dashboard updates itself.
+
+on:
+  schedule:
+    # 06:17 UTC daily. (Off the hour to avoid GitHub's busy scheduling windows.)
+    - cron: "17 6 * * *"
+  workflow_dispatch: {} # allow manual runs from the Actions tab
+
+# Allow the workflow to push the updated data back to the repo.
+permissions:
+  contents: write
+
+concurrency:
+  group: update-lol
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r LEAGUE_SCRIPTS/requirements.txt
+
+      - name: Fetch new matches
+        working-directory: LEAGUE_SCRIPTS
+        env:
+          RIOT_API_KEY: ${{ secrets.RIOT_API_KEY }}
+          RIOT_GAME_NAME: ${{ vars.RIOT_GAME_NAME || 'NoAnimeNoLife' }}
+          RIOT_TAG_LINE: ${{ vars.RIOT_TAG_LINE || 'ANIME' }}
+        run: python update_data.py
+
+      - name: Commit & push if data changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- public/lol; then
+            echo "No data changes — nothing to commit."
+          else
+            git add public/lol
+            git commit -m "chore(lol): daily match data refresh [skip ci]"
+            git push
+          fi

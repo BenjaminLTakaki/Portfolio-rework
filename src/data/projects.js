@@ -178,18 +178,14 @@ export const places = [
 export const skills = [
   {
     label: "AI / ML",
-    items: ["CNN", "BiGRU", "LSTM", "TFT", "NLP", "spaCy", "RAG", "Stable Diffusion", "LLMs"],
+    items: ["CNN", "BiGRU", "LSTM", "TFT", "NLP", "spaCy", "RAG", "Stable Diffusion", "LLMs", "Audio DSP", "STFT / CQT"],
   },
   {
     label: "Development",
     items: ["Python", "Flask", "FastAPI", "JavaScript", "Vue", "C#", "Docker"],
   },
   {
-    label: "Data Science",
-    items: ["Time-Series", "Audio DSP", "STFT / CQT", "Jupyter", "Data Analysis"],
-  },
-  {
-    label: "Cloud & APIs",
+    label: "Infrastructure",
     items: ["PostgreSQL", "SQLAlchemy", "REST / OAuth", "Git", "Render", "Heroku"],
   },
   {
