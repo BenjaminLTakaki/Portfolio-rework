@@ -8,6 +8,7 @@ import {
   timeOfDay,
   topLaneAnalysis,
   tierProgression,
+  championSynergy,
 } from "../lib/lolAnalysis";
 
 const RIOT_ID = "NoAnimeNoLife#ANIME";
@@ -15,22 +16,19 @@ const RIOT_ID = "NoAnimeNoLife#ANIME";
 export default function Lol() {
   const [matches, setMatches] = useState(null);
   const [topGames, setTopGames] = useState([]);
+  const [matchTeams, setMatchTeams] = useState([]);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const base = import.meta.env.BASE_URL;
-    Promise.all([
-      fetch(`${base}lol/matches.json`).then((r) => {
-        if (!r.ok) throw new Error("matches.json not found");
+    fetch("/api/lol/dashboard")
+      .then((r) => {
+        if (!r.ok) throw new Error("dashboard API unavailable");
         return r.json();
-      }),
-      fetch(`${base}lol/top_games.json`)
-        .then((r) => (r.ok ? r.json() : []))
-        .catch(() => []),
-    ])
-      .then(([m, t]) => {
+      })
+      .then(({ matches: m, topGames: t, matchTeams: mt }) => {
         setMatches(m);
-        setTopGames(t);
+        setTopGames(t || []);
+        setMatchTeams(mt || []);
       })
       .catch((e) => setError(e.message));
   }, []);
@@ -45,13 +43,14 @@ export default function Lol() {
       time: timeOfDay(matches),
       top: topLaneAnalysis(topGames),
       progression: tierProgression(matches),
+      synergy: championSynergy(matchTeams),
     };
-  }, [matches, topGames]);
+  }, [matches, topGames, matchTeams]);
 
   if (error) return <Centered>Couldn’t load match data — {error}</Centered>;
   if (!data) return <Centered>Loading match history…</Centered>;
 
-  const { stats, champs, streaks, form, time, top, progression } = data;
+  const { stats, champs, streaks, form, time, top, progression, synergy } = data;
 
   return (
     <main className="pt-28 pb-24 px-6 lg:px-12 max-w-screen-xl mx-auto animate-fade-up">
@@ -210,6 +209,25 @@ export default function Lol() {
         </>
       )}
 
+      {/* Champion synergy — who's good/bad to have as ally vs enemy */}
+      {synergy && (
+        <>
+          <SectionLabel>
+            Champion synergy · your win rate by who's in the game (≥{synergy.minGames}g)
+          </SectionLabel>
+          <div className="mb-4 grid grid-cols-1 gap-x-16 gap-y-12 lg:grid-cols-2">
+            <SynergyList title="🟢 Best allies on your team" rows={synergy.highlights.bestAllies} />
+            <SynergyList title="🔴 Worst allies on your team" rows={synergy.highlights.worstAllies} />
+            <SynergyList title="😄 Easiest enemies — you beat them most" rows={synergy.highlights.easiestEnemies} />
+            <SynergyList title="💀 Hardest enemies — your nemeses" rows={synergy.highlights.hardestEnemies} />
+          </div>
+          <p className="mb-20 font-mono text-[10px] leading-relaxed text-ink-faint">
+            Correlational, not causal — a champ can top the list simply for being
+            strong/meta during your winning games.
+          </p>
+        </>
+      )}
+
       {/* Tier progression — only when the data actually carries tier info */}
       {progression.length > 0 && (
         <>
@@ -282,6 +300,33 @@ function BarRow({ label, winrate, games, max }) {
           style={{ width: `${Math.max(4, (games / max) * 100)}%` }}
         />
       </div>
+    </div>
+  );
+}
+
+function SynergyList({ title, rows }) {
+  if (!rows || rows.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-4 font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+        {title}
+      </p>
+      <ul className="space-y-2.5">
+        {rows.map((r) => (
+          <li
+            key={r.champion}
+            className="flex items-baseline justify-between gap-4 border-b border-ink/[0.08] pb-2"
+          >
+            <span className="text-sm text-ink">{r.champion}</span>
+            <span className="font-mono text-[11px] text-ink-muted">
+              <span className="text-ink">{r.winrate.toFixed(0)}%</span>{" "}
+              <span className="text-ink-faint">
+                ({r.wins}/{r.games})
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

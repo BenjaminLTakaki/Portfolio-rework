@@ -39,6 +39,10 @@ jobs:
           RIOT_TAG_LINE: ${{ vars.RIOT_TAG_LINE || 'ANIME' }}
         run: python update_data.py
 
+      - name: Regenerate champion synergy data
+        working-directory: LEAGUE_SCRIPTS
+        run: python synergy_analysis.py
+
       - name: Commit & push if data changed
         run: |
           git config user.name "github-actions[bot]"

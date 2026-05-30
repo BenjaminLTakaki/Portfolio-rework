@@ -30,6 +30,7 @@ import json
 from pathlib import Path
 
 import riot_common as rc
+from download_team_comps import extract_teams  # reuse the ally/enemy splitter
 
 # Champions commonly played as ranged tops (kept in sync with top_lane_analysis).
 RANGED_TOP_CHAMPS = {
@@ -137,11 +138,15 @@ def main() -> None:
     print(f"  top_games : {rc.TOP_GAMES_FILE}")
     print("=" * 65 + "\n")
 
+    match_teams_file = rc.DATA_DIR / "match_teams.json"
+
     matches = load_json_list(rc.MATCHES_FILE)
     top_games = load_json_list(rc.TOP_GAMES_FILE)
+    match_teams = load_json_list(match_teams_file)
 
     known_match_ids = {m["match_id"] for m in matches}
     known_top_ids = {g["match_id"] for g in top_games}
+    known_team_ids = {t["match_id"] for t in match_teams}
 
     puuid = rc.get_puuid(game_name, tag_line, api_key)
 
@@ -159,6 +164,7 @@ def main() -> None:
     url = f"{rc.REGIONAL_HOST}/lol/match/v5/matches"
     added_matches = 0
     added_top = 0
+    added_teams = 0
 
     # Oldest new match first, so appended order stays chronological-ish before
     # the final sort.
@@ -177,19 +183,30 @@ def main() -> None:
             known_top_ids.add(top["match_id"])
             added_top += 1
 
+        # Same raw response → no extra API call. Powers champion_synergy.json.
+        teams = extract_teams(raw, puuid)
+        if teams and teams["match_id"] not in known_team_ids:
+            match_teams.append(teams)
+            known_team_ids.add(teams["match_id"])
+            added_teams += 1
+
         tag = "TOP" if top else "   "
         result = "Win " if slim and slim["win"] else "Loss"
         print(f"  + {match_id}  {result}  {slim['champion'] if slim else '?':14} [{tag}]")
 
     # Keep matches.json sorted oldest -> newest for the analysis scripts/site.
     matches.sort(key=lambda m: m["timestamp"])
+    match_teams.sort(key=lambda t: t["timestamp"])
 
     write_json_list(rc.MATCHES_FILE, matches)
     write_json_list(rc.TOP_GAMES_FILE, top_games)
+    write_json_list(match_teams_file, match_teams)
 
     print(
-        f"\n✅ Done. +{added_matches} match(es), +{added_top} top-lane game(s). "
-        f"Totals: {len(matches)} matches, {len(top_games)} top games."
+        f"\n✅ Done. +{added_matches} match(es), +{added_top} top-lane game(s), "
+        f"+{added_teams} team comp(s). "
+        f"Totals: {len(matches)} matches, {len(top_games)} top games, "
+        f"{len(match_teams)} team comps."
     )
 
 

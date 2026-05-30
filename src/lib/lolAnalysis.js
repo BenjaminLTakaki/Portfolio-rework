@@ -199,6 +199,53 @@ export function topLaneAnalysis(topGames) {
   };
 }
 
+// --- champion synergy (ally vs enemy winrate) ----------------------------
+// Mirrors the old LEAGUE_SCRIPTS/synergy_analysis.py. For each champion,
+// computes your winrate in games where it was on your team vs on the enemy
+// team. Correlational, not causal — `minGames` keeps tiny samples out of the
+// highlight lists.
+
+const SYNERGY_HIGHLIGHT_N = 8;
+
+function tallySide(matchTeams, side) {
+  const map = new Map();
+  for (const m of matchTeams) {
+    const champs = new Set(m[side] || []); // guard against mirror dupes
+    for (const champ of champs) {
+      const e = map.get(champ) || { champion: champ, games: 0, wins: 0 };
+      e.games += 1;
+      if (m.win) e.wins += 1;
+      map.set(champ, e);
+    }
+  }
+  return [...map.values()]
+    .map((e) => ({ ...e, winrate: (e.wins / e.games) * 100 }))
+    // winrate desc, then sample size desc as a tiebreaker
+    .sort((a, b) => b.winrate - a.winrate || b.games - a.games);
+}
+
+export function championSynergy(matchTeams, { minGames = 5 } = {}) {
+  if (!matchTeams || matchTeams.length === 0) return null;
+
+  const asAlly = tallySide(matchTeams, "allies");
+  const asEnemy = tallySide(matchTeams, "enemies");
+
+  const allies = asAlly.filter((r) => r.games >= minGames);
+  const enemies = asEnemy.filter((r) => r.games >= minGames);
+
+  return {
+    minGames,
+    asAlly,
+    asEnemy,
+    highlights: {
+      bestAllies: allies.slice(0, SYNERGY_HIGHLIGHT_N),
+      worstAllies: allies.slice(-SYNERGY_HIGHLIGHT_N).reverse(),
+      easiestEnemies: enemies.slice(0, SYNERGY_HIGHLIGHT_N),
+      hardestEnemies: enemies.slice(-SYNERGY_HIGHLIGHT_N).reverse(),
+    },
+  };
+}
+
 // --- helpers -------------------------------------------------------------
 
 function sum(arr, key) {
