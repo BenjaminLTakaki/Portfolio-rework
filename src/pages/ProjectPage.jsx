@@ -23,7 +23,8 @@ export default function ProjectPage() {
           <h1>{project.title}</h1>
           <p className="text-base text-ink-muted leading-relaxed max-w-prose">{project.summary}</p>
           <div className="flex flex-wrap gap-3 mt-7">
-            {project.url && <Link to={project.url} className="action action-primary">{project.id === "lol-forecaster" ? "Try the forecaster" : "Demo status"} <span aria-hidden="true">↗</span></Link>}
+            {project.url?.startsWith("http") && <a href={project.url} className="action action-primary" target="_blank" rel="noreferrer">Open the app <span aria-hidden="true">↗</span></a>}
+            {project.url?.startsWith("/") && <Link to={project.url} className="action action-primary">{project.id === "lol-forecaster" ? "Try the forecaster" : "Demo status"} <span aria-hidden="true">↗</span></Link>}
             {project.source && <a href={project.source} className="action" target="_blank" rel="noreferrer">View source code <span aria-hidden="true">↗</span></a>}
           </div>
         </div>

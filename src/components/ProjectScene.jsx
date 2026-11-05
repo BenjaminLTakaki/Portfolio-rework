@@ -191,7 +191,37 @@ function BrowserWindows({ color, motion }) {
   </group>;
 }
 
-const shapes = { "lol-forecaster": Forecast, guitarscribe: Harmonics, "spotify-cover-generator": Records, "audio-fingerprinting": Fingerprint, animewatchlist: Film, "freelance-portfolios": BrowserWindows };
+function StoryCard({ color, ...props }) {
+  return <group {...props}>
+    <Plate width={.66} height={1.05} depth={.04} color={color} />
+    <mesh position={[-.03,.1,.03]}><circleGeometry args={[.11,3]} /><meshBasicMaterial color={color} transparent opacity={.6} side={THREE.DoubleSide} /></mesh>
+    <Stroke points={[-.22,-.27,.03,.22,-.27,.03,-.22,-.37,.03,.08,-.37,.03]} color={color} segments opacity={.55} />
+  </group>;
+}
+
+// One story per row; the middle row slides between left, center, and right outlets.
+function SwipeFeed({ color, motion }) {
+  const feed = useRef();
+  const sides = useRef();
+  const marker = useRef();
+  useFrame(() => {
+    const t = motion.current.time;
+    const side = Math.sin(t * .6) * .38;
+    if (feed.current) feed.current.position.y = Math.sin(t * .3) * .12;
+    if (sides.current) sides.current.position.x = side;
+    if (marker.current) marker.current.position.x = -side * 1.5;
+  });
+  return <group ref={feed} rotation={[.1,-.24,-.08]}>
+    <StoryCard color={color} position={[0,1.24,-.2]} />
+    <StoryCard color={color} position={[0,-1.24,-.2]} />
+    <group ref={sides}>{[-.8,0,.8].map((x) => <StoryCard key={x} color={color} position={[x,0,0]} />)}</group>
+    <Stroke points={[-.42,-.6,.12,.42,-.6,.12,.42,.6,.12,-.42,.6,.12]} color={color} loop opacity={.8} />
+    <Stroke points={[-.57,-.66,.12,.57,-.66,.12]} color={color} opacity={.35} />
+    <group ref={marker}><Bead position={[0,-.66,.12]} color={color} size={.04} /></group>
+  </group>;
+}
+
+const shapes = { "lol-forecaster": Forecast, "swipe-news": SwipeFeed, guitarscribe: Harmonics, "spotify-cover-generator": Records, "audio-fingerprinting": Fingerprint, animewatchlist: Film, "freelance-portfolios": BrowserWindows };
 
 export default function ProjectScene({ project, interaction, visible, paused, reduced }) {
   const group = useRef();
