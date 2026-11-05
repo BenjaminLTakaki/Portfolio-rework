@@ -199,7 +199,7 @@ function StoryCard({ color, ...props }) {
   </group>;
 }
 
-// One story per row; the middle row slides between outlets in different regions.
+// One story per row; the middle row slides between left, center, and right outlets.
 function SwipeFeed({ color, motion }) {
   const feed = useRef();
   const sides = useRef();
