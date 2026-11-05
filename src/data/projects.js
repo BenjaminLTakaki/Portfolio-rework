@@ -64,7 +64,7 @@ export const projects = [
       "Complete-linkage clustering to stop one event swallowing the rest",
     ],
     description:
-      "A home-screen web app for short news clips. A scheduled pipeline lists recent uploads from 40 outlets across four regions, filters out videos over five minutes, livestreams, and promos, then groups the remaining clips into stories with bge-base-en-v1.5 title embeddings. Stories are ranked by recency and by how many regions and sides covered them, and marked when one side skipped them. Tabs split the feed into politics and sports, sorted by title keywords, and search covers every story from the last two days. Swiping up moves to the next story; swiping sideways shows the same story from the left, center, or right.",
+      "A home-screen web app for short news clips. A scheduled pipeline lists recent uploads from 40 outlets across four regions, filters out videos over five minutes, livestreams, and promos, then groups the remaining clips into stories with bge-base-en-v1.5 title embeddings. Stories are ranked by recency and by how many regions and sides covered them, and marked when one side skipped them. Tabs split the feed into politics and sports, sorted by title keywords, and search covers every story from the last two days. There are no accounts, settings stay on the device, and YouTube only loads after a visitor opts in. Swiping up moves to the next story; swiping sideways shows the same story from the left, center, or right.",
   },
   {
     id: "guitarscribe",

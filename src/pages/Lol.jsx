@@ -288,7 +288,7 @@ export default function Lol() {
 
       <div className="h-px bg-ink/[0.07] my-12" />
       <p className="font-mono text-[11px] text-ink-faint">
-        Data via the Riot Games API · refreshed daily · not endorsed by Riot Games.
+        Data via the Riot Games API · refreshed daily. This site isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
       </p>
     </main>
   );

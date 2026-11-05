@@ -109,7 +109,7 @@ export default function Home() {
           <a className="contact-email" href="mailto:bentakaki7@gmail.com">bentakaki7@gmail.com</a>
         </div>
       </section>
-      <footer className="page-container site-footer"><span>© {new Date().getFullYear()} Benjamin Takaki</span><div className="flex flex-wrap gap-6"><a href="https://github.com/BenjaminLTakaki" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://linkedin.com/in/benjamin-takaki" target="_blank" rel="noreferrer">LinkedIn ↗</a><Link to="/#main-content">Back to top ↑</Link></div></footer>
+      <footer className="page-container site-footer"><span>© {new Date().getFullYear()} Benjamin Takaki</span><div className="flex flex-wrap gap-6"><a href="/swipe-news/privacy.html">Privacy</a><a href="https://github.com/BenjaminLTakaki" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://linkedin.com/in/benjamin-takaki" target="_blank" rel="noreferrer">LinkedIn ↗</a><Link to="/#main-content">Back to top ↑</Link></div></footer>
     </main>
   );
 }
