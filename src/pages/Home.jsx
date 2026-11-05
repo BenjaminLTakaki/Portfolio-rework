@@ -53,7 +53,7 @@ export default function Home() {
         <article className="featured-project">
           <div className="featured-art">
             <ProjectMark project={featured} />
-            <div className="featured-art-caption"><span>Player ratings → bracket probabilities</span><span>01 / 06</span></div>
+            <div className="featured-art-caption"><span>Player ratings → bracket probabilities</span><span>01 / {String(projects.length).padStart(2, "0")}</span></div>
           </div>
           <div className="featured-copy">
             <p className="eyebrow">Featured / Interactive demo</p>
