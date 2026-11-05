@@ -12,8 +12,9 @@ export default {
         "bg-card": "#dedad4",
         "bg-hover": "#d4d0c8",
         ink: "#1a1a18",
-        "ink-muted": "#6b6960",
-        "ink-faint": "#9b9890",
+        // Derive readable secondary text from existing ink on both paper surfaces.
+        "ink-muted": "rgb(26 26 24 / 0.72)",
+        "ink-faint": "rgb(26 26 24 / 0.70)",
         accent: "#c8b89a",
       },
       aspectRatio: {

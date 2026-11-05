@@ -54,13 +54,14 @@ export default function Lol() {
   }, [matches, roleMatchups, matchTeams, player]);
 
   if (error) return <Centered>Couldn’t load match data — {error}</Centered>;
+  if (matches?.length === 0) return <Centered>No match history is available for this player yet.</Centered>;
   if (!data) return <Centered>Loading match history…</Centered>;
 
   const { stats, champs, streaks, form, time, roles, jungle, progression, synergy } = data;
   const isJungle = player.role === "JUNGLE";
 
   return (
-    <main className="pt-28 pb-24 px-6 lg:px-12 max-w-screen-xl mx-auto animate-fade-up">
+    <main id="main-content" className="pt-28 pb-24 px-6 lg:px-12 max-w-screen-xl mx-auto animate-fade-up">
       <Link
         to="/lol"
         className="mb-14 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:text-ink"
@@ -297,7 +298,7 @@ export default function Lol() {
 
 function Centered({ children }) {
   return (
-    <main className="flex h-screen items-center justify-center px-6">
+    <main id="main-content" className="flex h-screen items-center justify-center px-6">
       <p className="font-mono text-[11px] uppercase tracking-widest text-ink-muted text-center">
         {children}
       </p>

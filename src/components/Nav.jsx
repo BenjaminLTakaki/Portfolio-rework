@@ -1,51 +1,16 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 export default function Nav() {
-  const { pathname } = useLocation();
-  const navigate = useNavigate();
-  const isHome = pathname === "/";
-
-  const handleAbout = (e) => {
-    e.preventDefault();
-    if (isHome) {
-      document.getElementById("about")?.scrollIntoView({ behavior: "smooth" });
-    } else {
-      sessionStorage.setItem("scrollTo", "about");
-      navigate("/");
-    }
-  };
-
+  const { pathname, hash } = useLocation();
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-bg/80 backdrop-blur-md border-b border-ink/[0.05]">
-      <div className="max-w-screen-xl mx-auto px-6 lg:px-12 h-14 flex items-center justify-between">
-        <Link
-          to="/"
-          className="font-mono text-[11px] uppercase tracking-[0.22em] text-ink hover:text-ink-muted transition-colors"
-        >
-          Benjamin Takaki
-        </Link>
-
-        <nav className="flex items-center gap-8">
-          <Link
-            to="/"
-            className={`font-mono text-[11px] uppercase tracking-[0.18em] transition-colors ${
-              isHome ? "text-ink" : "text-ink-muted hover:text-ink"
-            }`}
-          >
-            Projects
-          </Link>
-          <button
-            onClick={handleAbout}
-            className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted hover:text-ink transition-colors"
-          >
-            About
-          </button>
-          <a
-            href="mailto:bentakaki7@gmail.com"
-            className="font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted hover:text-ink transition-colors"
-          >
-            Contact
-          </a>
+    <header className="site-nav">
+      <a className="skip-link" href="#main-content">Skip to content</a>
+      <div className="page-container nav-inner">
+        <Link to="/" className="nav-name" aria-label="Benjamin Takaki, home"><span className="nav-fullname">Benjamin Takaki</span><span className="nav-monogram" aria-hidden="true">BT.</span></Link>
+        <nav aria-label="Main navigation">
+          <Link to="/#work" aria-current={hash === "#work" || pathname.startsWith("/project/") ? "location" : undefined}>Work</Link>
+          <Link to="/#about" aria-current={hash === "#about" ? "location" : undefined}>About</Link>
+          <Link to="/#contact" aria-current={hash === "#contact" ? "location" : undefined}>Let’s talk <span aria-hidden="true">↗</span></Link>
         </nav>
       </div>
     </header>

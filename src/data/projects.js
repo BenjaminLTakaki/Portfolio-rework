@@ -1,10 +1,50 @@
 export const projects = [
   {
+    id: "lol-forecaster",
+    disciplines: ["AI / ML", "Full-stack"],
+    problem: "How can a tournament forecast account for roster changes, regional strength, and the uncertainty of an entire bracket?",
+    pipeline: ["Match history", "Player ratings", "Calibration", "Bracket simulation", "React interface"],
+    decisions: ["Represent strength at player level so a roster can be assembled from individual Bayesian ratings.", "Learn regional offsets from international games, where regions actually meet.", "Convert game probabilities into best-of-five series probabilities, then simulate 20,000 brackets in the browser."],
+    evidence: "The bundled model reports 66.8% accuracy and a calibrated Brier score of 0.2207 across 244 games from 2025 internationals. The uncalibrated Brier score is 0.2231; lower is better. These are exported evaluation results, not a benchmark recomputed by this website.",
+    limitations: "The demo uses a saved MSI 2026 model snapshot, not a live results feed. The browser demonstrates an eight-team double-elimination bracket. Reproducing the reported holdout scores requires the original training and evaluation pipeline; the model export alone does not establish the split methodology.",
+    title: "LoL Tournament Forecaster",
+    category: "Bayesian ML / Esports Analytics",
+    year: "2026",
+    url: "/forecaster",
+    metric: "66.8% holdout accuracy · 0.221 Brier on 2025 internationals",
+    logo: {
+      code: "TF",
+      motif: "grid",
+      mark: "#5b6350",
+      wash: "#d3d6c8",
+    },
+    tags: ["OpenSkill", "Monte Carlo", "Calibration", "Python"],
+    stack: ["Python", "OpenSkill (Plackett-Luce)", "pandas", "scikit-learn", "Monte Carlo", "React"],
+    summary:
+      "An interactive tournament forecaster combining Bayesian player ratings, regional strength, and a calibrated Monte Carlo bracket simulator.",
+    concepts: [
+      "Per-player Plackett-Luce ratings over 49k pro games",
+      "Region offsets learned only from international events",
+      "Reported evaluation on 244 games from 2025 internationals",
+      "Platt-calibrated probabilities (Brier-scored)",
+      "20k-iteration browser simulation of double-elimination brackets",
+      "In-browser re-simulation: lock real results, re-forecast live",
+    ],
+    description:
+      "Tournament forecaster for professional League of Legends. The model export contains player-derived OpenSkill strengths from 2022–2026 match data, regional offsets, and Platt-calibration parameters. Team strength combines roster ratings, a regional adjustment, and a roster-continuity discount. The React demo converts game probabilities to best-of-five series odds and simulates 20,000 eight-team double-elimination brackets in the browser.",
+  },
+  {
     id: "guitarscribe",
+    disciplines: ["AI / ML"],
+    source: "https://github.com/BenjaminLTakaki/GuitarTranscription",
+    problem: "Turn a guitar recording into structured notes that can be inspected, edited, and exported as MIDI.",
+    pipeline: ["Guitar audio", "Log-CQT", "CNN + BiGRU", "Onsets & frames", "MIDI"],
+    decisions: ["Start with a rule-based monophonic pitch detector as an interpretable baseline.", "Combine a convolutional encoder with a bidirectional GRU to capture both spectral features and musical context.", "Use separate onset and frame heads with GuitarSet annotations, plus a synthetic-data workflow for pretraining."],
+    evidence: "The public repository includes training, evaluation, inference, synthetic-data generation, and audio-to-tab alignment code. Its README documents the 144-bin log-CQT input and 126 string/fret classes.",
+    limitations: "No verified held-out F1 score is published here. The current implementation is a Python workflow; a browser transcription demo is a next step. Generalisation beyond GuitarSet needs evaluation on independent recordings.",
     title: "GuitarScribe",
     category: "Audio ML / Deep Learning",
     year: "2025",
-    cover: "/project-images/guitarscribe.png",
     logo: {
       code: "GS",
       motif: "wave",
@@ -24,15 +64,19 @@ export const projects = [
     ],
     description:
       "Deep learning guitar transcription system trained on GuitarSet. Uses a CNN plus BiGRU architecture with a 144-bin log-CQT spectrogram representation, dual output heads for onset and pitch, SpecAugment regularisation, and a synthetic data pipeline to supplement training data.",
-    images: ["/project-images/guitarscribe.png"],
   },
   {
     id: "spotify-cover-generator",
+    disciplines: ["AI / ML", "Full-stack"],
+    problem: "Turn someone’s listening history into a visual identity for their music, without asking them to write an image-generation prompt.",
+    pipeline: ["Spotify OAuth", "Listening history", "Prompt synthesis", "Image generation", "Cover artwork"],
+    decisions: ["Use Spotify OAuth to connect listening data to the generation workflow.", "Separate prompt synthesis from image generation so each stage has a clear responsibility.", "Combine Gemini prompts with Stable Diffusion and a LoRA-based image workflow."],
+    evidence: "The project combines authentication, an external data API, prompt generation, and image generation in a Flask application.",
+    limitations: "The external demo returned HTTP 503 when checked on September 7, 2026. Restoring the deployment and adding a sample gallery are the next steps for making the generation workflow inspectable without an account.",
     title: "Spotify Cover Generator",
     category: "Generative AI / Full-Stack",
     year: "2024",
     url: "/spotifycovergenerator",
-    cover: "/project-images/spotify-cover-generator.png",
     logo: {
       code: "SC",
       motif: "lens",
@@ -52,14 +96,19 @@ export const projects = [
     ],
     description:
       "Personalised album-art generator that reads a user's Spotify listening history and produces a matching cover using Gemini 2.5 Flash for prompt synthesis and Stable Diffusion with LoRA for image generation. Built as an 8-module pipeline with OAuth authentication.",
-    images: ["/project-images/spotify-cover-generator.png"],
   },
   {
     id: "audio-fingerprinting",
+    disciplines: ["AI / ML"],
+    source: "https://github.com/BenjaminLTakaki/Shazam",
+    problem: "Identify a short audio excerpt by matching it against a local catalogue of songs.",
+    pipeline: ["Audio excerpt", "STFT peaks", "Hash pairs", "SQLite lookup", "Offset alignment"],
+    decisions: ["Use sparse spectrogram landmarks instead of comparing entire recordings.", "Encode frequency pairs and time differences in compact hashes stored in SQLite.", "Identify a match through consistent time offsets, rather than isolated matching hashes."],
+    evidence: "The public repository provides a runnable command-line tool for adding songs and recognising audio samples, with configurable FFT, peak-picking, and hash-pair settings.",
+    limitations: "This is a local command-line application. Recognition under noise, compression, and different clip lengths needs a published benchmark before making accuracy claims.",
     title: "Audio Fingerprinting",
     category: "Audio DSP / Python",
     year: "2024",
-    cover: "/project-images/audio-fingerprinting.png",
     logo: {
       code: "AF",
       motif: "pulse",
@@ -79,14 +128,18 @@ export const projects = [
     ],
     description:
       "Shazam-style audio recognition system built from scratch. The pipeline converts audio to STFT spectrograms, picks local peaks, generates SHA-1 hash pair fingerprints with time offsets, stores them in SQLite, and matches queries via offset histogram alignment.",
-    images: ["/project-images/audio-fingerprinting.png"],
   },
   {
     id: "animewatchlist",
+    disciplines: ["Full-stack"],
+    problem: "Bring watch history, personal ratings, and discovery into one place instead of managing them separately.",
+    pipeline: ["MyAnimeList OAuth", "Data import", "PostgreSQL", "Ratings & history", "Recommendations"],
+    decisions: ["Use OAuth-based import to connect an existing MyAnimeList account.", "Store watch history and ratings in a relational model with SQLAlchemy.", "Build statistics and recommendations around a user’s own history."],
+    evidence: "The project covers account integration, persistence, personal statistics, and recommendations in a Flask application.",
+    limitations: "A matching public repository and a working hosted demo are not linked yet. A reproducible recommendation-quality comparison is the next evaluation step.",
     title: "AnimeWatchList",
     category: "Full-Stack / API Integration",
     year: "2024-2025",
-    cover: "/project-images/animewatchlist.png",
     logo: {
       code: "AW",
       motif: "grid",
@@ -106,14 +159,19 @@ export const projects = [
     ],
     description:
       "Full-stack anime tracking platform. Integrates MyAnimeList OAuth for data import, stores ratings and watch history in PostgreSQL, surfaces a statistics dashboard, and generates recommendations based on user history.",
-    images: ["/project-images/animewatchlist.png"],
   },
   {
     id: "freelance-portfolios",
+    disciplines: ["Full-stack"],
+    source: "https://github.com/BenjaminLTakaki/Thibault-Portfolio",
+    problem: "Give freelance creatives a personal website that presents their work and supports ongoing content updates.",
+    pipeline: ["Client requirements", "Frontend", "API integrations", "Admin tooling", "Deployment"],
+    decisions: ["Shape each portfolio around the client’s work rather than a generic content template.", "Integrate external media through YouTube and Spotify APIs where needed.", "Include admin tooling and deployment as part of delivering the complete website."],
+    evidence: "The portfolio records three client deliveries: Thibault, Vilgot, and Iurie. The linked Thibault repository provides a concrete example to inspect.",
+    limitations: "Client outcomes, testimonials, and before/after performance measurements are not published here. The source link represents one of the three sites.",
     title: "Freelance Portfolios",
     category: "Web Dev / Client Delivery",
     year: "2024-2025",
-    cover: "/project-images/freelance-portfolios.png",
     logo: {
       code: "FP",
       motif: "stack",
@@ -133,7 +191,6 @@ export const projects = [
     ],
     description:
       "Production portfolio websites built and deployed for three freelance clients: Thibault, Vilgot, and Iurie. Each included API integrations, a custom admin panel, and full deployment on Render, shipped end to end.",
-    images: ["/project-images/freelance-portfolios.png"],
   },
 ];
 
@@ -187,9 +244,5 @@ export const skills = [
   {
     label: "Infrastructure",
     items: ["PostgreSQL", "SQLAlchemy", "REST / OAuth", "Git", "Render", "Heroku"],
-  },
-  {
-    label: "Languages",
-    items: ["English C2", "French C2", "Japanese B1", "Dutch A1"],
   },
 ];

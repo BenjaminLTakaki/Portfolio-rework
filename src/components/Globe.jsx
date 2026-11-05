@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Globe3D } from "@/components/ui/3d-globe";
+import { ArtworkBoundary } from "./ProjectScene";
 
 const FLAG = {
   Bangkok: "https://flagcdn.com/w40/th.png",
@@ -11,6 +12,13 @@ const FLAG = {
 
 export default function Globe({ places }) {
   const [hovered, setHovered] = useState(null);
+  const [reduced, setReduced] = useState(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(query.matches);
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
 
   const markers = places.map((p) => ({
     lat: p.lat,
@@ -22,8 +30,8 @@ export default function Globe({ places }) {
   return (
     <div className="flex flex-col lg:flex-row items-center gap-8 lg:gap-16">
       {/* Globe */}
-      <div className="w-full max-w-[460px] flex-shrink-0">
-        <Globe3D
+      {!reduced && <div className="w-full max-w-[460px] flex-shrink-0">
+        <ArtworkBoundary><Globe3D
           markers={markers}
           config={{
             autoRotateSpeed: 0.35,
@@ -39,8 +47,8 @@ export default function Globe({ places }) {
           }}
           className="h-[420px]"
           onMarkerHover={(marker) => setHovered(marker?.label ?? null)}
-        />
-      </div>
+        /></ArtworkBoundary>
+      </div>}
 
       {/* Place list */}
       <div className="flex-1 w-full lg:max-w-xs">
@@ -71,7 +79,7 @@ export default function Globe({ places }) {
                     </p>
                   </div>
                 </div>
-                <span className="text-[11px] font-mono text-ink-faint">
+                <span className="text-[11px] font-mono text-ink-muted">
                   {place.years}
                 </span>
               </div>

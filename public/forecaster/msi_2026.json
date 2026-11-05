@@ -1,0 +1,129 @@
+{
+ "id": "msi_2026",
+ "name": "MSI 2026",
+ "format": "double_elimination",
+ "seriesFormat": "bo5",
+ "seeding": [
+  "Bilibili Gaming",
+  "Hanwha Life Esports",
+  "G2 Esports",
+  "LYON Gaming",
+  "Furia",
+  "Top Esports",
+  "Team Secret White",
+  "T1"
+ ],
+ "beta": 5.5,
+ "platt": [
+  1.3486156429136884,
+  0.0
+ ],
+ "teams": {
+  "Bilibili Gaming": {
+   "region": "LPL",
+   "strength": 35.108,
+   "playerMu": 30.74,
+   "regionOffset": 4.418,
+   "players": [
+    "Bin",
+    "Knight",
+    "Xun",
+    "Viper",
+    "ON"
+   ]
+  },
+  "G2 Esports": {
+   "region": "LEC",
+   "strength": 33.887,
+   "playerMu": 33.035,
+   "regionOffset": 0.902,
+   "players": [
+    "Caps",
+    "Hans Sama",
+    "Labrov",
+    "SkewMond",
+    "BrokenBlade"
+   ]
+  },
+  "Hanwha Life Esports": {
+   "region": "LCK",
+   "strength": 37.116,
+   "playerMu": 31.462,
+   "regionOffset": 5.704,
+   "players": [
+    "Kanavi",
+    "Gumayusi",
+    "Delight",
+    "Zeka",
+    "Zeus"
+   ]
+  },
+  "LYON Gaming": {
+   "region": "LCS",
+   "strength": 25.027,
+   "playerMu": 25.0,
+   "regionOffset": 0.077,
+   "players": []
+  },
+  "Top Esports": {
+   "region": "LPL",
+   "strength": 33.448,
+   "playerMu": 29.08,
+   "regionOffset": 4.418,
+   "players": [
+    "fengyue",
+    "Tian",
+    "JackeyLove",
+    "ZUIAN",
+    "Creme"
+   ]
+  },
+  "T1": {
+   "region": "LCK",
+   "strength": 38.151,
+   "playerMu": 32.497,
+   "regionOffset": 5.704,
+   "players": [
+    "Faker",
+    "Peyz",
+    "Doran",
+    "Keria",
+    "Oner"
+   ]
+  },
+  "Team Secret White": {
+   "region": "LCP",
+   "strength": 24.95,
+   "playerMu": 25.0,
+   "regionOffset": 0.0,
+   "players": []
+  },
+  "Furia": {
+   "region": "CBLOL",
+   "strength": 22.978,
+   "playerMu": 25.0,
+   "regionOffset": -1.972,
+   "players": []
+  }
+ },
+ "meta": {
+  "trainedGames": 49809,
+  "trainedPlayers": 7815,
+  "trainingYears": [
+   2022,
+   2023,
+   2024,
+   2025,
+   2026
+  ],
+  "validation": {
+   "year": 2025,
+   "games": 244,
+   "accuracy": 0.668,
+   "brier": 0.2231,
+   "brierCalibrated": 0.2207,
+   "msiAccuracy": 0.675,
+   "worldsAccuracy": 0.667
+  }
+ }
+}
