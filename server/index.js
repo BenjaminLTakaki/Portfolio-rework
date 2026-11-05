@@ -7,6 +7,7 @@
 //       GET /api/health         -> Postgres version (DB smoke test)
 //   - Run a daily node-cron job that incrementally refreshes data from the
 //     Riot API into Neon — keeping the dashboard current without a redeploy.
+//   - Start the Swipe News feed build every 10 minutes (see swipeNews.js).
 
 import "dotenv/config";
 import path from "node:path";
@@ -18,6 +19,7 @@ import cron from "node-cron";
 import { sql, ensureSchema, getMatches, getRoleMatchups, getMatchTeams } from "./db.js";
 import { refreshFromRiot } from "./riot.js";
 import { PLAYERS, publicPlayer } from "./players.js";
+import { makeFeedRefresher } from "./swipeNews.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, "..", "dist");
@@ -52,6 +54,17 @@ app.get("/api/lol/:player/dashboard", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
   }
+});
+
+// --- Swipe News ------------------------------------------------------------
+
+const refreshFeed = makeFeedRefresher({ token: process.env.SWIPE_NEWS_DISPATCH_TOKEN });
+cron.schedule("*/10 * * * *", refreshFeed, { timezone: "UTC" });
+
+// A visit also starts a build, so a server that was asleep still catches up.
+app.use("/swipe-news", (_req, _res, next) => {
+  refreshFeed();
+  next();
 });
 
 // --- Static SPA + history fallback ----------------------------------------
