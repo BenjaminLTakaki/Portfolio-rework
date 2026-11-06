@@ -124,7 +124,7 @@ let feed = null, stories = [];
 let activeS = -1, activeC = -1, currentId = null;
 let player = null, playerReady = false, unlocked = false, playing = false, playerStarted = false;
 let topic = TOPICS[store.get('topic', 'all')] ? store.get('topic', 'all') : 'all';
-let query = '', place = '', everything = null;
+let query = '', place = '', everything = null, searchFrom = 'search';     // searchFrom: the tab Back returns to
 let tab = 'news', pageOpen = false, lastPlace = '';   // pageOpen: a full page covers the feed, so the player stays out of the way
 let reserve = null, loadingMore = false, ended = false, startRun = 0, flashTimer = 0, refreshing = false;
 let side = settings.side || null, autoAdvance = false, hintTimer = 0;     // side: the one you last chose, kept from story to story
@@ -163,7 +163,7 @@ const inFeedView = () => !pageOpen;
 function renderBar() {
   const back = $('#back'), action = $('#bar-action'), select = $('#topic'), pushed = place || query;
   back.hidden = !pushed;
-  back.textContent = place ? 'World' : 'Search';
+  back.textContent = place ? 'World' : searchFrom === 'recap' ? 'Recap' : 'Search';
   select.hidden = !!pushed;
   $('#bar-chevron').toggleAttribute('hidden', !!pushed);      // an svg has no .hidden property
   $('#bar-title').textContent = place ? `${COUNTRY[place]?.[1] ?? ''} ${COUNTRY[place]?.[0] ?? place}`.trim() : query ? `\u201C${query}\u201D` : TOPICS[topic];
@@ -181,7 +181,7 @@ $('#topic').onchange = (e) => {
   if (feed) { onScrollStart(); start(); }
 };
 $('#back').onclick = () => {
-  const from = place ? 'world' : 'search';
+  const from = place ? 'world' : searchFrom;
   place = ''; query = '';
   renderBar();
   onScrollStart();
@@ -317,17 +317,44 @@ async function renderRecap() {
   for (const day of [...new Set(digest.map((e) => e.day))]) {
     section(dayLabel(day), digest.filter((e) => e.day === day).map((e) => recapRow(e, find(e.clips))));
   }
+  renderFraming(box, src.framing);
   box.append(el('p', 'group-note', digest.length
     ? 'Each day’s biggest stories, ranked like the feed: more outlets, regions and sides first. Each summary is one sentence from an outlet’s own video description, picked by matching words, not written by AI.'
     : 'Recap fills in as the day’s stories come in.'));
 }
 
-function openStory(s) {
+// Words one side used more than the other for the same stories this week; only differences too big to be chance.
+function renderFraming(box, f) {
+  if (!f?.headlines) return;
+  const base = `${f.headlines} headlines from ${f.stories} stories both Left and Right covered this week`;
+  if (!f.left.length && !f.right.length) {
+    box.append(el('h2', 'group-title', 'Words Each Side Used More'),
+      el('p', 'group-note', `No word separates the sides yet. Across ${base}, every difference in wording could be chance.`));
+    return;
+  }
+  for (const [side, label] of [['left', 'Left'], ['right', 'Right']]) {
+    if (!f[side].length) continue;
+    const group = el('div', 'group');
+    for (const w of f[side]) {
+      const row = el('button', 'cell nav');
+      row.type = 'button';
+      const tail = el('span', 'tail');
+      tail.append(el('span', 'count', `${w.outlets} outlets`));
+      row.append(el('span', '', w.word), tail);
+      row.onclick = () => runSearch(w.word, 'recap');
+      group.append(row);
+    }
+    box.append(el('h2', 'group-title', `Words ${label} Outlets Used More`), group);
+  }
+  box.append(el('p', 'group-note', `From ${base}, each outlet counted once per story. Only differences too big to be chance are shown. Tap a word to see its stories.`));
+}
+
+function openStory(s, clip) {
   place = ''; query = '';
   renderBar();
   onScrollStart();
   pageOpen = false;
-  start({ story: s.id }, s);
+  start({ story: s.id, clip }, s);
   show('news');
 }
 
@@ -423,17 +450,18 @@ function renderRecent() {
   box.append(group);
 }
 
-async function runSearch(q) {
+async function runSearch(q, from = 'search') {
   query = q;
   place = '';
-  store.set('recentSearches', [q, ...store.get('recentSearches', []).filter((r) => r !== q)].slice(0, RECENT_MAX));
+  searchFrom = from;
+  if (from === 'search') store.set('recentSearches', [q, ...store.get('recentSearches', []).filter((r) => r !== q)].slice(0, RECENT_MAX));
   $('#search-input').blur();
   renderBar();
   onScrollStart();
   feedEl.textContent = '';
   setStatus('Searching\u2026');
   stories = [];
-  show('search', { pushed: true });
+  show(from, { pushed: true });
   everything = everything || await loadEverything();
   start();
 }
@@ -915,7 +943,7 @@ $('#welcome-next').onclick = () => {
 function finishWelcome(on) {
   chooseVideos(on);
   welcomeEl.close();
-  if (feed) start();
+  if (feed) start(here());      // a shared link may have opened a story behind the welcome
 }
 $('#consent-videos').onclick = () => finishWelcome(true);
 $('#consent-text').onclick = () => finishWelcome(false);
@@ -984,6 +1012,83 @@ const endDrag = (e) => {
 sheetHead.addEventListener('pointerup', endDrag);
 sheetHead.addEventListener('pointercancel', endDrag);
 
+function gap(ms) {
+  const m = Math.round(ms / 60000), h = Math.floor(m / 60);
+  return m < 60 ? `${m}m` : `${h}h${h < 10 && m % 60 ? ` ${m % 60}m` : ''}`;
+}
+// Outlets in the order they first posted about the story, and how fast it crossed regions.
+function timeline(s) {
+  const at = (c) => Date.parse(c.since || c.published);
+  const order = [...s.clips].sort((a, b) => at(a) - at(b)), t0 = at(order[0]);
+  const group = el('div', 'group');
+  order.forEach((c, i) => {
+    const row = el('div', 'cell');
+    row.append(el('span', '', `${COUNTRY[c.country]?.[1] ?? ''} ${c.channel}`.trim()),
+      el('span', 'count', i ? `+${gap(at(c) - t0)}` : `First, ${ago(c.since || c.published)}`));
+    group.append(row);
+  });
+  const reached = new Map();
+  for (const c of order) if (!reached.has(c.region)) reached.set(c.region, at(c));
+  const spread = reached.size > 1 ? `It reached ${reached.size} regions within ${gap(Math.max(...reached.values()) - t0)}. ` : '';
+  return [el('h2', 'group-title', 'Who Covered It First'), group,
+    el('p', 'group-note', `${spread}Times are when each outlet first posted a clip about it on YouTube, which can trail its other reporting.`)];
+}
+
+// ---------------------------------------------------------------- share
+// A 4:5 card: the story, then one headline from each side, so it reads the same as Compare without the app.
+const CARD = { w: 1080, h: 1350, pad: 88, bg: '#0b0c0f', ink: '#f6f7f9', muted: '#b4b9c2', tint: '#3b8cff', font: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif' };
+function lines(ctx, text, width, max) {
+  const out = [];
+  let line = '';
+  for (const w of text.split(/\s+/)) {
+    const t = line ? `${line} ${w}` : w;
+    if (line && ctx.measureText(t).width > width) { out.push(line); line = w; } else line = t;
+  }
+  if (line) out.push(line);
+  if (out.length > max) { out.length = max; out[max - 1] = `${out[max - 1].replace(/\s+\S*$/, '')}…`; }
+  return out;
+}
+function storyCard(s, currentClip) {
+  const c = document.createElement('canvas'), ctx = c.getContext('2d'), W = CARD.w - 2 * CARD.pad;
+  c.width = CARD.w; c.height = CARD.h;
+  ctx.fillStyle = CARD.bg; ctx.fillRect(0, 0, CARD.w, CARD.h);
+  ctx.textBaseline = 'top';
+  const text = (str, y, size, weight, color, lh, max) => {
+    ctx.font = `${weight} ${size}px ${CARD.font}`; ctx.fillStyle = color;
+    for (const l of lines(ctx, str, W, max)) { ctx.fillText(l, CARD.pad, y); y += lh; }
+    return y;
+  };
+  let y = text('SWIPE NEWS', CARD.pad, 28, 700, CARD.tint, 34, 1) + 36;
+  y = text(s.headline, y, 64, 700, CARD.ink, 76, 4) + 56;
+  const pick = (list) => list.find((k) => k.id === currentClip) || list[0];
+  const blocks = s.topic === 'sports'
+    ? s.clips.slice(0, 3).map((k) => [k.channel.toUpperCase(), k])
+    : ['left', 'center', 'right'].map((col) => s.clips.filter((k) => k.column === col)).filter((l) => l.length)
+      .map((l) => [`${COLUMNS[l[0].column].toUpperCase()} · ${pick(l).channel}`, pick(l)]);
+  for (const [label, k] of blocks) {
+    if (y > CARD.h - 330) break;
+    y = text(label, y, 26, 700, CARD.muted, 36, 1) + 6;
+    y = text(k.title, y, 40, 500, CARD.ink, 50, 3) + 40;
+  }
+  const n = new Set(s.clips.map((k) => k.channel)).size;
+  text(`${n} outlets covered this story. Compare them all in Swipe News.`, CARD.h - CARD.pad - 34, 26, 400, CARD.muted, 34, 1);
+  return new Promise((resolve) => c.toBlob(resolve, 'image/png'));
+}
+async function shareStory(s, currentClip) {
+  const url = `${location.origin}${location.pathname}?story=${encodeURIComponent(s.id)}&clip=${encodeURIComponent(currentClip)}`;
+  const data = { title: s.headline, text: 'How different outlets covered it', url };
+  try {
+    const blob = await storyCard(s, currentClip);
+    const files = blob ? [new File([blob], 'swipe-news.png', { type: 'image/png' })] : [];
+    if (files.length && navigator.canShare?.({ files })) return await navigator.share({ ...data, files });
+    if (navigator.share) return await navigator.share(data);
+    await navigator.clipboard.writeText(url);
+    flash('Link copied');
+  } catch (e) {
+    if (e?.name !== 'AbortError') flash('Couldn’t share this story.');      // AbortError: you closed the share sheet
+  }
+}
+
 function openCompare(si, currentClip) {
   const s = stories[si], box = $('#compare-body');
   box.textContent = '';
@@ -1011,6 +1116,11 @@ function openCompare(si, currentClip) {
     }
     box.append(group);
   }
+  if (s.clips.length > 1) box.append(...timeline(s));
+  const share = el('button', 'watch-link', 'Share This Story');
+  share.type = 'button';
+  share.onclick = () => shareStory(s, currentClip);
+  box.append(share);
   const yt = el('a', 'watch-link', 'Watch This Clip on YouTube');
   yt.href = `https://www.youtube.com/watch?v=${currentClip}`; yt.target = '_blank'; yt.rel = 'noopener';
   box.append(yt, el('p', 'group-note', 'Headlines from YouTube videos. Sides are outlet ratings from Media Bias/Fact Check, not judgements of these headlines.'));
@@ -1082,6 +1192,8 @@ function draw(at) {
   createPlayer(stories[Math.max(si, 0)].clips[ci].id);
 }
 
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { /* offline just won't work */ });
+
 (async function boot() {
   renderBar();
   show('news');
@@ -1092,6 +1204,16 @@ function draw(at) {
     setStatus('Couldn’t load the feed. Check your connection.', true);
     return;
   }
+  // a shared link: ?story=…&clip=…, found by the clip too in case the story's id changed since
+  const linked = params.get('story'), linkedClip = params.get('clip');
+  if (linked) {
+    history.replaceState(null, '', params.get('feed') ? `?feed=${encodeURIComponent(params.get('feed'))}` : location.pathname);
+    const find = (list) => list.find((s) => s.id === linked) || list.find((s) => s.clips.some((c) => c.id === linkedClip));
+    const s = find(feed.stories) || find(everything = await loadEverything());
+    if (s) { openStory(s, linkedClip); updateBadge(); return; }
+    flash('That story is more than two days old, so it’s no longer here.');
+  }
   start();
+  if (!navigator.onLine) flash(`You’re offline. These are the stories from ${ago(feed.generated)}.`);
   updateBadge();
 })();
