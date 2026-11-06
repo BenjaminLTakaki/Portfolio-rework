@@ -14,7 +14,7 @@
   --danger: oklch(66% .22 25);
   --bar-h: calc(44px + env(safe-area-inset-top));
   --tab-h: calc(50px + env(safe-area-inset-bottom));
-  --seg-h: 44px;
+  --seg-h: 36px;
   --meta-h: 118px;
   --ease: cubic-bezier(.32, .72, 0, 1);
 }
@@ -49,7 +49,6 @@ button:active, a:active { opacity: .6; }
 #feed::-webkit-scrollbar, .clips::-webkit-scrollbar { display: none; }
 .story { height: 100%; scroll-snap-align: start; scroll-snap-stop: always;
   display: grid; grid-template-rows: var(--seg-h) 2px 1fr; }
-.story.sports { grid-template-rows: 2px 1fr; }
 .story.end { display: grid; grid-template-rows: none; place-content: center; justify-items: center; gap: 16px; padding: 32px; text-align: center; color: var(--muted); }
 .story.end .filled { width: auto; padding: 0 24px; }
 
@@ -60,6 +59,7 @@ button:active, a:active { opacity: .6; }
 .seg button.on { background: var(--surface-2); font-weight: 600; }
 .seg button:disabled { color: var(--faint); opacity: .55; cursor: default; }
 .seg button:active { opacity: 1; }
+.seg-note { flex: 1; text-align: center; font-size: 13px; color: var(--muted); }      /* sport: no sides, so a plain label */
 
 /* ---- position inside the story ---- */
 .ticks { display: flex; gap: 3px; padding: 0 16px; }
@@ -99,6 +99,11 @@ button:active, a:active { opacity: .6; }
 #player-wrap { background: var(--bg); }
 #player, #player-wrap iframe { width: 100%; height: 100%; display: block; border: 0; }
 #gesture { z-index: 6; touch-action: none; }
+/* "+10 s" / "−10 s" after a double-tap, on the side you tapped */
+#skip { position: absolute; top: 50%; right: 24px; transform: translateY(-50%); padding: 6px 12px; border-radius: 999px;
+  background: rgb(0 0 0 / .6); color: #fff; font-size: 15px; font-weight: 600; opacity: 0; transition: opacity 200ms ease-out; pointer-events: none; }
+#skip.back { right: auto; left: 24px; }
+#skip.on { opacity: 1; }
 #player-wrap.off { visibility: hidden; }
 
 /* ---- small messages ---- */
@@ -154,6 +159,7 @@ button:active, a:active { opacity: .6; }
   font: inherit; font-size: 17px; -webkit-user-select: text; user-select: text; -webkit-appearance: none; appearance: none; }
 #search-input::placeholder { color: var(--muted); }
 #search-input:focus { outline: 0; }
+#search-hint:empty { display: none; }
 
 /* ---- your mix ---- */
 #settings-mix { padding: 10px 16px; }
@@ -216,6 +222,8 @@ dialog::backdrop { background: oklch(0% 0 0 / .6); }
   .sheet[open], .sheet.closing { animation: none; }
   * { transition-duration: 0ms !important; }
 }
+:root.videos { --meta-h: 100px; }     /* no funding line under the title when the player shows it */
+
 @media (max-width: 340px) {
   .welcome-step { padding-left: 20px; padding-right: 20px; padding-top: calc(28px + env(safe-area-inset-top)); }
   .welcome-step h1 { font-size: 28px; line-height: 34px; }

@@ -18,6 +18,11 @@ const SOMEWHERE_MIN = 5;      // "Take Me Somewhere" skips countries with too li
 const RECENT_MAX = 6;
 const MIX_DAYS = 7;
 const COLUMNS = { left: 'Left', center: 'Center', right: 'Right', unrated: 'Not rated' };
+// The outlet's own rating. Lean Left swipes under Left and Lean Right under Right, so this tells them apart.
+const LEAN = { left: 'Left', 'lean-left': 'Lean Left', center: 'Center', 'lean-right': 'Lean Right', right: 'Right', unrated: 'Not rated' };
+// After the outlet: "Lean Left · 3h ago · Canada". On a narrow phone with videos on the row runs out of room, so the
+// country, which the Compare sheet and World tab also show, comes last. Sport has no sides, so no rating.
+const byline = (c, s) => [s.topic !== 'sports' && LEAN[c.lean], ago(c.published), c.country].filter(Boolean).join(' · ');
 const LANDSCAPE = matchMedia('(orientation: landscape) and (max-height: 500px) and (pointer: coarse)');   // a sideways phone: see #rotate
 const SMOOTH = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 const icon = (path) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z"/>${path}</svg>`;
@@ -25,6 +30,7 @@ const SOUND_ON = icon('<path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/>')
 const SOUND_OFF = icon('<path d="m16 9.5 5 5m0-5-5 5"/>');
 const PLAY_CHECK_MS = 1800;   // if a clip isn't playing after this, ask for a tap
 const WATCHED_AFTER_MS = 3000;
+const DOUBLE_TAP_MS = 250, SKIP_S = 10;
 const SIDEWAYS_HINT = 'Swipe sideways for other outlets';
 const SIDEWAYS_HINT_MS = 5000, SIDEWAYS_HINTS = 3;
 const SETTINGS_DEFAULTS = { side: '', auto: true, hideWatched: false, sportsInAll: true, notes: true };
@@ -58,6 +64,7 @@ for (const old of ['blind', 'dailyGame']) { try { localStorage.removeItem(old); 
 const settings = { ...SETTINGS_DEFAULTS, ...store.get('settings', {}) };
 let consent = store.get('consent', null);    // 'videos' or 'text'. Nothing from YouTube loads until it is 'videos'.
 const videosOn = () => consent === 'videos';
+document.documentElement.classList.toggle('videos', videosOn());     // style.css gives the video more room
 let watched = new Set(store.get('watched', []));
 function markWatched(id) {
   if (watched.has(id)) return;
@@ -195,14 +202,18 @@ function show(next, opts = {}) {
     onScrollStart();
     showHint('');
     if (next === 'world') renderWorld();
-    if (next === 'search') renderRecent();
+    if (next === 'search') { renderRecent(); $('#search-input').focus(); }    // inside the tap, so iOS opens the keyboard
     if (next === 'settings') syncSettings();
     return;
   }
-  if (settingsChanged && feed) {
-    settingsChanged = false;
+  if (settingsChanged && feed) {      // which stories you see may have changed
+    settingsChanged = redraw = false;
     onScrollStart();
-    start();
+    start(here());
+  } else if (redraw && feed) {        // only how they're drawn
+    redraw = false;
+    onScrollStart();
+    draw(here());
   } else {
     settle();
   }
@@ -343,6 +354,15 @@ $('#search-form').onsubmit = (e) => {
   const q = $('#search-input').value.trim();
   if (q && feed) runSearch(q);
 };
+// How many stories match as you type, and that Search on the keyboard opens them.
+$('#search-input').oninput = async (e) => {
+  const q = e.target.value.trim(), hint = $('#search-hint');
+  if (!q || !feed) { hint.textContent = ''; return; }
+  everything = everything || await loadEverything();
+  if (e.target.value.trim() !== q) return;      // you typed on while it loaded
+  const n = matches(everything, q).length;
+  hint.textContent = n ? `${n} ${n === 1 ? 'story matches' : 'stories match'}. Press Search to watch ${n === 1 ? 'it' : 'them'}.` : 'No stories match.';
+};
 
 async function loadEverything() {
   try {
@@ -386,7 +406,7 @@ function renderStory(s, si) {
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', 'Rating of the outlets covering this story');
     for (const [col, label] of Object.entries(COLUMNS)) {
-      if (col === 'unrated' && !s.sides.unrated) continue;
+      if (col === 'unrated') continue;      // not rated clips still come last, with their rating on the clip: a fourth segment crowded the row
       const b = el('button', '', label);      // a side with no outlets stays visible but off: that gap is information
       b.type = 'button';
       b.dataset.column = col;
@@ -395,7 +415,12 @@ function renderStory(s, si) {
       b.onclick = () => jumpToColumn(si, col);
       seg.append(b);
     }
-    segRow.append(seg);
+    if (s.topic === 'sports') {     // left and right mean nothing for sport, but an empty row looked broken
+      const n = new Set(s.clips.map((c) => c.channel)).size;
+      segRow.append(el('span', 'seg-note', `Sports · ${n} ${n === 1 ? 'outlet' : 'outlets'}`));
+    } else {
+      segRow.append(seg);
+    }
 
     const clips = el('div', 'clips');
     const ticks = el('div', 'ticks');
@@ -411,7 +436,7 @@ function renderStory(s, si) {
         const off = el('div', 'off');
         const on = el('button', 'filled', 'Turn On Videos');
         on.type = 'button';
-        on.onclick = () => { chooseVideos(true); onScrollStart(); start(); };
+        on.onclick = () => { chooseVideos(true); onScrollStart(); draw({ story: s.id, clip: c.id }); };    // same stories, now with video
         const open = el('a', '', 'Watch on YouTube');
         open.href = `https://www.youtube.com/watch?v=${c.id}`; open.target = '_blank'; open.rel = 'noopener';
         off.append(el('b', '', 'Videos Are Off'), el('span', '', 'YouTube can set cookies on this device when they\u2019re on.'), on, open);
@@ -421,7 +446,7 @@ function renderStory(s, si) {
       const meta = el('div', 'meta');
       const row = el('div', 'row');
       const src = el('span', 'src');
-      src.append(el('b', '', c.channel), ` · ${c.country ? `${c.country} · ` : ''}${ago(c.published)}`);
+      src.append(el('b', '', c.channel), ` · ${byline(c, s)}`);
       const snd = el('button', 'snd');
       snd.innerHTML = SOUND_ON; snd.setAttribute('aria-label', 'Sound on or off'); snd.onclick = toggleMute;
       const compare = el('button', 'compare-btn', 'Compare');
@@ -430,7 +455,8 @@ function renderStory(s, si) {
       yt.href = `https://www.youtube.com/watch?v=${c.id}`; yt.target = '_blank'; yt.rel = 'noopener';
       row.append(src, ...(videosOn() ? [snd] : []), s.clips.length > 1 ? compare : yt);
       meta.append(el('h2', 'ctitle', c.title));
-      if (c.note && settings.notes) meta.append(el('p', 'note', c.note));    // YouTube's box in the player cuts this off, and we can't change it
+      // With videos on, YouTube's player shows the notice itself (sometimes cut off; Compare has it in full), so the line under the title only repeated it
+      if (c.note && settings.notes && !videosOn()) meta.append(el('p', 'note', c.note));
       meta.append(row);
       clip.append(slot, meta);
       clips.append(clip);
@@ -438,8 +464,7 @@ function renderStory(s, si) {
     });
     let t = 0;
     clips.addEventListener('scroll', () => { onScrollStart(); clearTimeout(t); t = setTimeout(settle, 140); }, { passive: true });
-    if (s.topic !== 'sports') sec.append(segRow);
-    sec.append(ticks, clips);
+    sec.append(segRow, ticks, clips);
     feedEl.append(sec);
     markPosition(si, 0);
 }
@@ -729,8 +754,29 @@ gesture.addEventListener('pointerup', (e) => {
   g0 = null;
   if (Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx)) return goStory(dy < 0 ? 1 : -1);
   if (Math.abs(dx) > 40) return goClip(dx < 0 ? 1 : -1);
-  if (dt < 400 && playerReady) playing ? player.pauseVideo() : player.playVideo();
+  if (dt >= 400 || !playerReady) return;
+  // Double-tap the left or right half to go back or forward, as on YouTube; keep tapping to skip more.
+  // So a single tap (pause/play) waits DOUBLE_TAP_MS to be sure it isn't the first of two.
+  const now = Date.now(), r = gesture.getBoundingClientRect();
+  clearTimeout(tapTimer);
+  if (now - lastTap < DOUBLE_TAP_MS) {
+    lastTap = now;
+    skip(e.clientX < r.left + r.width / 2 ? -SKIP_S : SKIP_S);
+    return;
+  }
+  lastTap = now;
+  tapTimer = setTimeout(() => { lastTap = 0; playing ? player.pauseVideo() : player.playVideo(); }, DOUBLE_TAP_MS);
 });
+let lastTap = 0, tapTimer = 0, skipTimer = 0;
+function skip(d) {
+  const end = player.getDuration() || 0;
+  player.seekTo(Math.max(0, Math.min(end ? end - 1 : Infinity, player.getCurrentTime() + d)), true);
+  const f = $('#skip');
+  f.textContent = d < 0 ? `−${-d} s` : `+${d} s`;
+  f.className = d < 0 ? 'back on' : 'on';
+  clearTimeout(skipTimer);
+  skipTimer = setTimeout(() => f.classList.remove('on'), 600);
+}
 gesture.addEventListener('pointercancel', () => { g0 = null; });
 // Without this, Chromium treats a flick here as a fling and swallows the next tap anywhere on the page.
 gesture.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
@@ -769,6 +815,7 @@ setInterval(checkForNewStories, CHECK_FEED_MS);
 function chooseVideos(on) {
   consent = on ? 'videos' : 'text';
   store.set('consent', consent);
+  document.documentElement.classList.toggle('videos', on);
 }
 $('#welcome-next').onclick = () => {
   $('#welcome-1').hidden = true;
@@ -785,7 +832,7 @@ $('#consent-text').onclick = () => finishWelcome(false);
 welcomeEl.addEventListener('cancel', (e) => e.preventDefault());      // a real choice, either way
 
 // ---------------------------------------------------------------- settings
-let settingsChanged = false;
+let settingsChanged = false, redraw = false;
 const toggles = ['auto', 'hideWatched', 'sportsInAll', 'notes'];
 function saveSettings() {
   store.set('settings', settings);
@@ -804,7 +851,7 @@ for (const t of toggles) {
 $('#set-side').onchange = (e) => { settings.side = e.target.value; side = settings.side || null; saveSettings(); };
 $('#set-videos').onchange = (e) => {
   chooseVideos(e.target.checked);
-  if (e.target.checked) settingsChanged = true;
+  if (e.target.checked) redraw = true;
   else location.reload();     // the only way to fully take the YouTube player back out of the page
 };
 $('#set-clear').onclick = (e) => {
@@ -863,7 +910,8 @@ function openCompare(si, currentClip) {
       const b = el('button', 'cell headline' + (c.id === currentClip ? ' now' : ''));
       b.type = 'button';
       if (c.id === currentClip) b.setAttribute('aria-current', 'true');
-      b.append(el('span', 'headline-title', c.title), el('span', 'headline-sub', `${c.channel} \u00b7 ${c.country ? `${c.country} \u00b7 ` : ''}${ago(c.published)}`));
+      b.append(el('span', 'headline-title', c.title), el('span', 'headline-sub', `${c.channel} \u00b7 ${byline(c, s)}`));
+      if (c.note && settings.notes) b.append(el('span', 'headline-sub', c.note));     // in full: the player's box can cut it off
       b.onclick = () => {
         const ci = s.clips.indexOf(c), sc = clipsEl(si);
         closeSheet(compareEl);
@@ -880,7 +928,11 @@ function openCompare(si, currentClip) {
   compareEl.showModal();
 }
 
-function start() {
+// Where you are, by id, so a rebuilt feed can put you back on the same clip.
+const here = () => (stories[activeS] ? { story: stories[activeS].id, clip: stories[activeS].clips[activeC]?.id } : null);
+
+// at: { story, clip } ids to stay on (here()), if that story is still in the rebuilt feed.
+function start(at) {
   startRun++;
   reserve = null;
   ended = false;
@@ -898,7 +950,7 @@ function start() {
       if (!everything) {
         const run = startRun;
         setStatus('Loading\u2026');
-        loadEverything().then((all) => { everything = all; if (run === startRun) start(); });
+        loadEverything().then((all) => { everything = all; if (run === startRun) start(at); });
         return;
       }
       const all = orderStories(everything.filter(inTopic));
@@ -907,6 +959,11 @@ function start() {
     }
     stories = spread(fresh);
   }
+  draw(at);
+}
+
+// Draws `stories` and opens on `at` if it's there, else on the first story.
+function draw(at) {
   currentId = null;
   activeS = -1;
   if (!stories.length) {
@@ -920,11 +977,17 @@ function start() {
   }
   setStatus('');
   render();
-  if (query) showEnd();
-  feedEl.scrollTop = 0;
+  if (query || ended) showEnd();
+  const si = at ? stories.findIndex((s) => s.id === at.story) : -1;
+  const ci = si < 0 ? 0 : Math.max(0, stories[si].clips.findIndex((c) => c.id === at.clip));
+  feedEl.scrollTop = Math.max(si, 0) * feedEl.clientHeight;
+  if (si >= 0) {
+    clipsEl(si).scrollLeft = ci * clipsEl(si).clientWidth;
+    activeS = si; activeC = ci;     // the same story, not a new one: settle mustn't turn it to your usual side
+  }
   if (playerStarted || !videosOn()) { settle(); return; }
   playerStarted = true;
-  createPlayer(stories[0].clips[0].id);
+  createPlayer(stories[Math.max(si, 0)].clips[ci].id);
 }
 
 (async function boot() {
