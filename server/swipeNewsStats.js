@@ -1,4 +1,4 @@
-// Swipe News usage: anonymous daily totals only. The app sends counts like { visit: 1, watched_left: 3 } when you leave
+// Certior (formerly Swipe News) usage: anonymous daily totals only. The app sends counts like { visit: 1, watched_left: 3 } when you leave
 // it; each becomes +n on (day, name). No cookies, IDs or IP addresses are stored, so nothing here can be traced to a
 // person or linked across days. The stats page (password in SWIPE_STATS_PASSWORD) reads the totals back.
 import crypto from "node:crypto";
@@ -51,6 +51,6 @@ export function statsAuth(password) {
     const encoded = (req.get("authorization") || "").replace(/^Basic\s+/i, "");
     const given = Buffer.from(encoded, "base64").toString().split(":").slice(1).join(":");
     if (given && crypto.timingSafeEqual(digest(given), digest(password))) return next();
-    res.set("WWW-Authenticate", 'Basic realm="Swipe News stats"').status(401).send("Password needed");
+    res.set("WWW-Authenticate", 'Basic realm="Certior stats"').status(401).send("Password needed");
   };
 }

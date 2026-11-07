@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Swipe News Stats</title>
+<title>Certior Stats</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -54,7 +54,7 @@
 </style>
 </head>
 <body>
-<h1>Swipe News</h1>
+<h1>Certior</h1>
 <p class="note">Anonymous daily totals from the app: no cookies, IDs or addresses. A visitor is one device on one day. Last 7 days, against the 7 before.</p>
 
 <div class="kpis" id="kpis"></div>
@@ -98,7 +98,7 @@
     <div>
       <textarea id="caption" aria-label="Caption"></textarea>
       <div class="row">
-        <a class="btn" id="download" download="swipe-news.png">Download Image</a>
+        <a class="btn" id="download" download="certior.png">Download Image</a>
         <button type="button" id="copy">Copy Caption</button>
       </div>
     </div>
@@ -113,7 +113,7 @@
 <div id="tip" role="tooltip"></div>
 
 <script type="module">
-import { storyCard } from '/swipe-news/card.js';
+import { storyCard } from '/certior/card.js';
 
 const $ = (s) => document.querySelector(s);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
@@ -234,7 +234,7 @@ async function showPost() {
   const s = picks[+pick.value || 0];
   if (!s) { $('#caption').value = 'No story from the last day was covered by all three sides yet.'; return; }
   const first = SIDES.map(([k, label]) => [label, s.clips.find((c) => c.column === k)]);
-  const url = `${location.origin}/swipe-news/?story=${encodeURIComponent(s.id)}&clip=${encodeURIComponent(first[1][1].id)}&ref=social`;
+  const url = `${location.origin}/certior/?story=${encodeURIComponent(s.id)}&clip=${encodeURIComponent(first[1][1].id)}&ref=social`;
   const blob = await storyCard(s, first[1][1].id);
   const src = URL.createObjectURL(blob);
   $('#card').src = src; $('#download').href = src;

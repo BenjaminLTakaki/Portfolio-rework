@@ -27,3 +27,9 @@ export function makeFeedRefresher({ token, fetchFn = fetch, now = Date.now, log 
     }
   };
 }
+
+// The app moved from /swipe-news to /certior (Swipe News is another app's name). Old links, shared stories and Home
+// Screen installs keep working: every old address redirects to the same place under /certior, query and all.
+export function movedTo(newBase) {
+  return (req, res) => res.redirect(301, newBase + req.url);
+}

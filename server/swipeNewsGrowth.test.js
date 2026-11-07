@@ -60,7 +60,7 @@ const STORY = {
 test("a shared story's link previews its headline, each side and its clip, escaped", () => {
   const html = withPreview(INDEX, STORY, "vidCenter01");
   assert.ok(!html.includes("<script>alert(1)</script>") && html.includes("&#60;script&#62;"));
-  assert.match(html, /<title>Strike shuts ports .* \| Swipe News<\/title>/);
+  assert.match(html, /<title>Strike shuts ports .* \| Certior<\/title>/);
   assert.match(html, /og:description" content="Left \(DW News\): Ports close as unions strike \/ Center \(Reuters\): Port strike halts trade \/ Right/);
   assert.match(html, /og:image" content="https:\/\/i\.ytimg\.com\/vi\/vidCenter01\/hqdefault\.jpg"/);
   assert.equal((html.match(/og:title/g) || []).length, 1, "the default block is replaced, not repeated");

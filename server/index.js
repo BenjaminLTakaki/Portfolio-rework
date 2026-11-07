@@ -7,9 +7,10 @@
 //       GET /api/health         -> Postgres version (DB smoke test)
 //   - Run a daily node-cron job that incrementally refreshes data from the
 //     Riot API into Neon — keeping the dashboard current without a redeploy.
-//   - Start the Swipe News feed build every 10 minutes (see swipeNews.js).
-//   - Swipe News: keep anonymous daily usage totals and show them at /swipe-news-stats (swipeNewsStats.js), and give
-//     shared story links a preview of that story (swipeNewsPreview.js).
+//   - Certior (the news app, built in the swipe-news repo, formerly Swipe News) at /certior:
+//       start its feed build every 10 minutes (swipeNews.js), keep anonymous daily usage totals and show them at
+//       /certior-stats (swipeNewsStats.js), and give shared story links a preview of that story (swipeNewsPreview.js).
+//       Old /swipe-news addresses redirect to /certior.
 
 import "dotenv/config";
 import { readFile } from "node:fs/promises";
@@ -22,7 +23,7 @@ import cron from "node-cron";
 import { sql, ensureSchema, getMatches, getRoleMatchups, getMatchTeams } from "./db.js";
 import { refreshFromRiot } from "./riot.js";
 import { PLAYERS, publicPlayer } from "./players.js";
-import { makeFeedRefresher } from "./swipeNews.js";
+import { makeFeedRefresher, movedTo } from "./swipeNews.js";
 import { cleanEvents, makeStats, statsAuth } from "./swipeNewsStats.js";
 import { makePreview } from "./swipeNewsPreview.js";
 
@@ -61,16 +62,22 @@ app.get("/api/lol/:player/dashboard", async (req, res) => {
   }
 });
 
-// --- Swipe News ------------------------------------------------------------
+// --- Certior (formerly Swipe News) ---------------------------------------------
 
 const refreshFeed = makeFeedRefresher({ token: process.env.SWIPE_NEWS_DISPATCH_TOKEN });
 cron.schedule("*/10 * * * *", refreshFeed, { timezone: "UTC" });
 
 // A visit also starts a build, so a server that was asleep still catches up.
-app.use("/swipe-news", (_req, _res, next) => {
+app.use("/certior", (_req, _res, next) => {
   refreshFeed();
   next();
 });
+
+// The app moved from /swipe-news. Its old offline service worker gets a version that removes itself (it would keep
+// serving the cached old app), and every other old address redirects, so links, shares and installs keep working.
+app.get("/swipe-news/sw.js", (_req, res) => res.type("js").set("Cache-Control", "no-cache").sendFile(path.join(__dirname, "swipe-news-retired-sw.js")));
+app.use("/swipe-news", movedTo("/certior"));
+app.get("/swipe-news-stats", (_req, res) => res.redirect(301, "/certior-stats"));
 
 // Anonymous daily totals: the app posts a small batch of counts when you leave it (sendBeacon).
 const stats = makeStats(sql);
@@ -87,12 +94,12 @@ app.get("/api/swipe-news/stats", statsGate, async (_req, res) => {
     res.status(500).json({ error: String(err.message || err) });
   }
 });
-app.get("/swipe-news-stats", statsGate, (_req, res) => res.sendFile(path.join(__dirname, "swipe-news-stats.html")));
+app.get("/certior-stats", statsGate, (_req, res) => res.sendFile(path.join(__dirname, "swipe-news-stats.html")));
 
 // A shared story's link previews that story (WhatsApp, iMessage, social media).
-const indexFile = path.join(DIST_DIR, "swipe-news", "index.html");
+const indexFile = path.join(DIST_DIR, "certior", "index.html");
 let indexHtml = null;
-app.get(["/swipe-news/", "/swipe-news/index.html"], makePreview({ readIndex: async () => (indexHtml ??= await readFile(indexFile, "utf8")) }));
+app.get(["/certior/", "/certior/index.html"], makePreview({ readIndex: async () => (indexHtml ??= await readFile(indexFile, "utf8")) }));
 
 // --- Static SPA + history fallback ----------------------------------------
 

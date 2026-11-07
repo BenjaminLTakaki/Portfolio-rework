@@ -1,4 +1,4 @@
-// Link previews for shared stories. A shared link (?story=...&clip=...) used to preview as plain "Swipe News"; now the
+// Link previews for shared stories. A shared link (?story=...&clip=...) used to preview as plain "Certior"; now the
 // page it returns carries that story's headline, one headline per side and the clip's YouTube thumbnail, so a share in
 // WhatsApp, iMessage or on social media shows the story itself. Without ?story the page is served as it is.
 const FEED_BASE = "https://benjaminltakaki.github.io/swipe-news/";
@@ -15,10 +15,10 @@ export function previewTags(story, clipId) {
     return c && `${label} (${c.channel}): ${c.title}`;
   }).filter(Boolean);
   const outlets = new Set(story.clips.map((c) => c.channel)).size;
-  const description = sides.length > 1 ? sides.join(" / ") : `${outlets} outlets covered this story. Compare them in Swipe News.`;
+  const description = sides.length > 1 ? sides.join(" / ") : `${outlets} outlets covered this story. Compare them in Certior.`;
   const meta = (attr, key, value) => `<meta ${attr}="${key}" content="${escapeHtml(value)}">`;
   return [
-    `<title>${escapeHtml(story.headline)} | Swipe News</title>`,
+    `<title>${escapeHtml(story.headline)} | Certior</title>`,
     meta("name", "description", description),
     meta("property", "og:title", story.headline),
     meta("property", "og:description", description),

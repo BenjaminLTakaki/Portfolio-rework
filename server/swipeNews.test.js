@@ -31,3 +31,11 @@ test("a GitHub failure is logged and never thrown", async () => {
   assert.match(seen[0], /offline/);
   assert.doesNotMatch(seen[0], /secret/);
 });
+
+test("old /swipe-news addresses redirect to /certior, query and all", async () => {
+  const { movedTo } = await import("./swipeNews.js");
+  const go = (url) => { let to; movedTo("/certior")({ url }, { redirect: (code, where) => { to = [code, where]; } }); return to; };
+  assert.deepEqual(go("/"), [301, "/certior/"]);
+  assert.deepEqual(go("/?story=s_abc&clip=xyz&ref=instagram"), [301, "/certior/?story=s_abc&clip=xyz&ref=instagram"]);
+  assert.deepEqual(go("/privacy.html"), [301, "/certior/privacy.html"]);
+});
