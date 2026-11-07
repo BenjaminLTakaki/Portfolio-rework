@@ -1,7 +1,7 @@
 // Link previews for shared stories. A shared link (?story=...&clip=...) used to preview as plain "Certior"; now the
 // page it returns carries that story's headline, one headline per side and the clip's YouTube thumbnail, so a share in
 // WhatsApp, iMessage or on social media shows the story itself. Without ?story the page is served as it is.
-const FEED_BASE = "https://benjaminltakaki.github.io/swipe-news/";
+const FEED_BASE = "https://benjaminltakaki.github.io/certior-news/";
 const SIDES = [["left", "Left"], ["center", "Center"], ["right", "Right"]];
 const STORY_ID = /^s_[\w-]{6,40}$/;
 const CLIP_ID = /^[\w-]{6,20}$/;

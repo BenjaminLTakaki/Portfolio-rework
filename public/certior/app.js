@@ -6,7 +6,7 @@ import { storyCard } from './card.js';
 
 const params = new URLSearchParams(location.search);
 // ponytail: copied from the swipe-news repo's docs/; Actions publishes the feed to GitHub Pages, so new stories need no Render deploy
-const FEED_URL = params.get('feed') || 'https://benjaminltakaki.github.io/swipe-news/feed.json';
+const FEED_URL = params.get('feed') || 'https://benjaminltakaki.github.io/certior-news/feed.json';
 const TOPICS = { all: 'All News', politics: 'Politics', business: 'Business', tech: 'Tech', science: 'Science & Health', crime: 'Crime', disasters: 'Disasters', culture: 'Culture', sports: 'Sports' };
 const REGION_LABEL = { americas: 'Americas', asia: 'Asia and Pacific', europe: 'Europe', mideast_africa: 'Africa and Middle East' };
 const COUNTRY = {

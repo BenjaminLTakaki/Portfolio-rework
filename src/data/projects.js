@@ -36,7 +36,7 @@ export const projects = [
   {
     id: "swipe-news",
     disciplines: ["AI / ML", "Full-stack"],
-    source: "https://github.com/BenjaminLTakaki/swipe-news",
+    source: "https://github.com/BenjaminLTakaki/certior-news",
     support: "https://ko-fi.com/certiornews",
     problem: "How can you see how left, center, and right outlets around the world cover the same event, without searching each one separately?",
     pipeline: ["52 YouTube channels", "Clip filtering", "Embeddings", "Story grouping", "Swipe interface"],

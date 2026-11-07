@@ -6,7 +6,7 @@
 // Instagram fetches the image from a public URL: the server serves the JPEG it just drew, from memory, at
 // /api/certior/instagram/<day>.jpg. The access token lasts 60 days; it is refreshed weekly and kept in the database.
 const IG = "https://graph.instagram.com"; // ponytail: unversioned calls use Meta's oldest supported version; pin one if that ever bites
-const FEED = "https://benjaminltakaki.github.io/swipe-news/feed.json";
+const FEED = "https://benjaminltakaki.github.io/certior-news/feed.json";
 const SIDES = [["left", "Left"], ["center", "Center"], ["right", "Right"]];
 const DAY_MS = 864e5;
 export const REFRESH_AFTER_MS = 7 * DAY_MS;

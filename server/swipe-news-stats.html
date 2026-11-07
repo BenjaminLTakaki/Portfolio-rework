@@ -229,7 +229,7 @@ for (const d of Object.keys(byDay).sort().reverse()) {
 }
 
 // ---- today's post: the biggest story of the last day that all three sides covered
-const feed = await (await fetch(`https://benjaminltakaki.github.io/swipe-news/feed.json?t=${Date.now()}`)).json();
+const feed = await (await fetch(`https://benjaminltakaki.github.io/certior-news/feed.json?t=${Date.now()}`)).json();
 const outlets = (s) => new Set(s.clips.map((c) => c.channel)).size;
 const SIDES = [['left', 'Left'], ['center', 'Center'], ['right', 'Right']];
 const picks = feed.stories
