@@ -17,13 +17,15 @@ const COUNTRY = {
 const SOMEWHERE_MIN = 5;      // "Take Me Somewhere" skips countries with too little to show
 const RECENT_MAX = 6;
 const MIX_DAYS = 7;
-const COLUMNS = { left: 'Left', center: 'Center', right: 'Right', unrated: 'Not rated' };
+const COLUMNS = { left: 'Left', center: 'Center', right: 'Right', state: 'State-funded', unrated: 'Not rated' };
+const SIDES = ['left', 'center', 'right'];      // the pipeline orders clips Left, Center, Right, Left..., then the rest
 // The outlet's own rating. Lean Left swipes under Left and Lean Right under Right, so this tells them apart.
 const LEAN = { left: 'Left', 'lean-left': 'Lean Left', center: 'Center', 'lean-right': 'Lean Right', right: 'Right', unrated: 'Not rated' };
 // After the outlet: "Lean Left · 3h ago · Canada". On a narrow phone with videos on the row runs out of room, so the
 // country, which the Compare sheet and World tab also show, comes last. Sport has no sides, so no rating.
-const byline = (c, s) => [s.topic !== 'sports' && LEAN[c.lean], ago(c.published), c.country].filter(Boolean).join(' · ');
-const LANDSCAPE = matchMedia('(orientation: landscape) and (max-height: 500px) and (pointer: coarse)');   // a sideways phone: see #rotate
+// The clip row leaves the country out (it cut off as "5h ago…", and World has it); Compare has room for it.
+const byline = (c, s, country = false) => [s.topic !== 'sports' && (c.column === 'state' ? 'State-funded' : LEAN[c.lean]), ago(c.published), country && c.country].filter(Boolean).join(' · ');
+const LANDSCAPE = matchMedia('(orientation: landscape) and (max-height: 500px)');   // a sideways phone, or any screen too short for the video: see #rotate
 const SMOOTH = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 const icon = (path) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4Z"/>${path}</svg>`;
 const SOUND_ON = icon('<path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/>');
@@ -31,18 +33,20 @@ const SOUND_OFF = icon('<path d="m16 9.5 5 5m0-5-5 5"/>');
 const PLAY_CHECK_MS = 1800;   // if a clip isn't playing after this, ask for a tap
 const WATCHED_AFTER_MS = 3000;
 const DOUBLE_TAP_MS = 250, SKIP_S = 10;
+// Swipes over the video follow your finger: past DRAG_COMMIT of the screen, or a flick faster than FLICK_PX_MS, goes on
+// to the next story or outlet when you let go; anything less springs back. DRAG_START tells a drag from a tap.
+const DRAG_START = 8, DRAG_COMMIT = 0.25, FLICK_PX_MS = 0.4;
 const SIDEWAYS_HINT = 'Swipe sideways for other outlets';
-const SIDEWAYS_HINT_MS = 5000, SIDEWAYS_HINTS = 3;
-const SETTINGS_DEFAULTS = { side: '', auto: true, hideWatched: false, sportsInAll: true, notes: true };
+const SETTINGS_DEFAULTS = { side: 'center', auto: true, hideWatched: false, sportsInAll: true, notes: true };
 // YouTube forbids disabling the links inside its player, and they sit along its top and bottom edges.
 // So swipes are only caught in the middle band; everything above and below reaches YouTube.
 const GESTURE_TOP = 0.25, GESTURE_HEIGHT = 0.5;
 const REFRESH_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3L19.5 9"/><path d="M19.5 4.5V9H15"/></svg>';
 const MORE_AT = 8, MORE_STORIES = 40;      // the feed is the top stories only: fetch the rest when you get this close to its end
-const FLASH_MS = 3000;
+const FLASH_MS = 3000;      // every message and tip goes after this, so it never sits on the video
 const SHUFFLE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.500 7.500h3.300c1.500 0 2.800.7 3.700 1.900l3 4.200c.9 1.200 2.200 1.900 3.700 1.900h3.300M3.500 16.500h3.300c1.500 0 2.800-.7 3.700-1.900M14.500 10.400c.9-1.200 1.200-2.900 3.700-2.900h2.300M18 5l2.500 2.500L18 10M18 14l2.500 2.500L18 19"/></svg>';
 const CHECK_FEED_MS = 2 * 60000;
-const AWAY_MS = 60 * 60000, RECAP_NEW_MAX = 10;     // Recap: away this long and the stories that began since get a badge
+const AWAY_MS = 60 * 60000, RECAP_NEW_MAX = 10, RECAP_MIN_OUTLETS = 3;     // Recap: away this long and the stories that began since get a badge
 
 const $ = (s, el = document) => el.querySelector(s);
 const feedEl = $('#feed'), wrap = $('#player-wrap'), gesture = $('#gesture');
@@ -63,6 +67,7 @@ const store = {
 };
 for (const old of ['blind', 'dailyGame']) { try { localStorage.removeItem(old); } catch { /* private mode etc. */ } }     // from a game that no longer exists
 const settings = { ...SETTINGS_DEFAULTS, ...store.get('settings', {}) };
+if (!settings.side) settings.side = 'center';     // '' was the old default, Last Side I Picked: it left everyone on Left
 let consent = store.get('consent', null);    // 'videos' or 'text'. Nothing from YouTube loads until it is 'videos'.
 const videosOn = () => consent === 'videos';
 document.documentElement.classList.toggle('videos', videosOn());     // style.css gives the video more room
@@ -110,7 +115,6 @@ function renderMix(box) {
     const b = el('button', 'mix-try', `Open Stories on ${COLUMNS[least]} for a While`);
     b.onclick = () => {
       settings.side = least;
-      side = least;
       store.set('settings', settings);
       $('#set-side').value = least;
       b.replaceWith(el('p', '', `Stories will open on ${COLUMNS[least]} when they have it.`));
@@ -125,9 +129,15 @@ let activeS = -1, activeC = -1, currentId = null;
 let player = null, playerReady = false, unlocked = false, playing = false, playerStarted = false;
 let topic = TOPICS[store.get('topic', 'all')] ? store.get('topic', 'all') : 'all';
 let query = '', place = '', everything = null, searchFrom = 'search';     // searchFrom: the tab Back returns to
+let pushedList = null, feedSpot = null;     // pushedList: { title, stories } opened from Recap; feedSpot: your place in the feed before any of these
+const pushed = () => !!(place || query || pushedList);
+// Before opening World, Search or a Recap list over the feed, remember your place; Back puts you there again.
+function leaveFeed() { if (!pushed()) feedSpot = here(); }
+function backToFeed() { place = ''; query = ''; pushedList = null; const at = feedSpot; feedSpot = null; return at; }
 let tab = 'news', pageOpen = false, lastPlace = '';   // pageOpen: a full page covers the feed, so the player stays out of the way
 let reserve = null, loadingMore = false, ended = false, startRun = 0, flashTimer = 0, refreshing = false;
-let side = settings.side || null, autoAdvance = false, hintTimer = 0;     // side: the one you last chose, kept from story to story
+let side = null, autoAdvance = false;    // side: the one you last swiped to, for Open Stories On: Last Side I Picked
+const openSide = () => (settings.side === 'last' ? side || 'center' : settings.side);
 let playCheck = 0, watchTimer = 0;
 let latest = null;      // the newest feed fetched, even while you're still watching the one before it
 
@@ -161,12 +171,13 @@ async function loadFeed() {
 const inFeedView = () => !pageOpen;
 
 function renderBar() {
-  const back = $('#back'), action = $('#bar-action'), select = $('#topic'), pushed = place || query;
-  back.hidden = !pushed;
+  const back = $('#back'), action = $('#bar-action'), select = $('#topic'), isPushed = pushed();
+  back.hidden = !isPushed;
   back.textContent = place ? 'World' : searchFrom === 'recap' ? 'Recap' : 'Search';
-  select.hidden = !!pushed;
-  $('#bar-chevron').toggleAttribute('hidden', !!pushed);      // an svg has no .hidden property
-  $('#bar-title').textContent = place ? `${COUNTRY[place]?.[1] ?? ''} ${COUNTRY[place]?.[0] ?? place}`.trim() : query ? `\u201C${query}\u201D` : TOPICS[topic];
+  select.hidden = isPushed;
+  $('#bar-chevron').toggleAttribute('hidden', isPushed);      // an svg has no .hidden property
+  $('#bar-title').textContent = place ? `${COUNTRY[place]?.[1] ?? ''} ${COUNTRY[place]?.[0] ?? place}`.trim()
+    : query ? `\u201C${query}\u201D` : pushedList ? pushedList.title : TOPICS[topic];
   select.value = topic;
   action.innerHTML = place ? SHUFFLE_ICON : REFRESH_ICON;
   action.setAttribute('aria-label', place ? 'Take me somewhere else' : 'Check for new stories');
@@ -182,11 +193,11 @@ $('#topic').onchange = (e) => {
 };
 $('#back').onclick = () => {
   const from = place ? 'world' : searchFrom;
-  place = ''; query = '';
+  const at = backToFeed();
   renderBar();
   onScrollStart();
   pageOpen = true;      // the page comes back first, so nothing plays behind it while the feed rebuilds
-  if (feed) start();
+  if (feed) start(at);
   show(from);
 };
 
@@ -205,7 +216,10 @@ function show(next, opts = {}) {
     showHint('');
     if (next === 'recap') renderRecap();
     if (next === 'world') renderWorld();
-    if (next === 'search') { renderRecent(); $('#search-input').focus(); }    // inside the tap, so iOS opens the keyboard
+    if (next === 'search') {
+      if ($('#search-input').value.trim()) showResults();      // back from a result: the list you left
+      else { renderRecent(); $('#search-input').focus(); }      // inside the tap, so iOS opens the keyboard
+    }
     if (next === 'settings') syncSettings();
     return;
   }
@@ -225,22 +239,22 @@ for (const b of document.querySelectorAll('#tabbar button')) {
   b.onclick = () => {
     const next = b.dataset.tab;
     if (next === 'news') {
-      if (place || query) {        // tapping a tab returns to its root, as everywhere on iOS
-        place = ''; query = '';
+      if (pushed()) {        // tapping a tab returns to its root, as everywhere on iOS
+        const at = backToFeed();
         renderBar();
         pageOpen = false;
         onScrollStart();
-        if (feed) start();
+        if (feed) start(at);
       } else if (tab === 'news') {
         feedEl.scrollTo({ top: 0, behavior: SMOOTH });
       }
       return show('news');
     }
-    if (place || query) {
-      place = ''; query = '';
+    if (pushed()) {
+      const at = backToFeed();
       renderBar();
       pageOpen = true;
-      if (feed) start();
+      if (feed) start(at);
     }
     show(next);
   };
@@ -276,15 +290,26 @@ function dayLabel(day) {
   return new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
-// A row opens the story in the feed while it's still in the last two days, and its clip on YouTube after that.
-function recapRow(e, live, when) {
+// The first headline from each side, in swipe order: a story told by its sides, not by one outlet's summary.
+const sideHeads = (s) => Object.fromEntries(SIDES.map((k) => [k, s.clips.find((c) => c.column === k)]).filter(([, c]) => c));
+
+// A row opens the story over the feed while it's still in the last two days (Back returns here), and its clip on
+// YouTube after that. open(live) gets the story the row stands for.
+function recapRow(e, live, open, when) {
   const b = el(live ? 'button' : 'a', 'cell headline');
   b.append(el('span', 'headline-title', e.headline));
-  if (e.summary) b.append(el('span', 'headline-sub recap-summary', `${e.summary_by}: ${e.summary}`));
+  for (const k of SIDES) {
+    const h = e.by_side?.[k];
+    if (!h) continue;
+    const line = el('span', 'headline-sub side-line');
+    line.dataset.column = k;
+    line.append(el('b', '', h.channel), ` ${h.title}`);
+    b.append(line);
+  }
   b.append(el('span', 'headline-sub', [`${e.outlets} outlets`, when, !live && 'Watch on YouTube'].filter(Boolean).join(' · ')));
   if (live) {
     b.type = 'button';
-    b.onclick = () => openStory(live);
+    b.onclick = () => open(live);
   } else {
     b.href = `https://www.youtube.com/watch?v=${e.clips[0]}`; b.target = '_blank'; b.rel = 'noopener';
   }
@@ -311,15 +336,23 @@ async function renderRecap() {
     group.append(...rows);
     box.append(el('h2', 'group-title', title), group);
   };
-  section('Since Your Last Visit', newSince(src.stories).map((s) =>
-    recapRow({ ...s, outlets: outlets(s), clips: s.clips.map((c) => c.id) }, s, `began ${ago(s.first)}`)));
-  const digest = (src.digest || []).filter(recapTopic);
+  // Each section opens as a list you can swipe through, starting at the story you tapped.
+  const rows = (title, items) => {
+    const live = items.map((x) => x.live).filter(Boolean);
+    return items.map((x) => recapRow(x.e, x.live, (s) => openRecapList(title, live, s), x.when));
+  };
+  const fresh = newSince(src.stories).sort((a, b) => outlets(b) - outlets(a));
+  section('Since Your Last Visit', rows('Since Your Last Visit', fresh.map((s) =>
+    ({ e: { ...s, outlets: outlets(s), clips: s.clips.map((c) => c.id), by_side: sideHeads(s) }, live: s, when: `began ${ago(s.first)}` }))));
+  const digest = (src.digest || []).filter((e) => recapTopic(e) && e.outlets >= RECAP_MIN_OUTLETS);
   for (const day of [...new Set(digest.map((e) => e.day))]) {
-    section(dayLabel(day), digest.filter((e) => e.day === day).map((e) => recapRow(e, find(e.clips))));
+    const items = digest.filter((e) => e.day === day).sort((a, b) => b.outlets - a.outlets || b.score - a.score)
+      .map((e) => ({ e, live: find(e.clips) }));
+    section(dayLabel(day), rows(dayLabel(day), items));
   }
   renderFraming(box, src.framing);
   box.append(el('p', 'group-note', digest.length
-    ? 'Each day’s biggest stories, ranked like the feed: more outlets, regions and sides first. Each summary is one sentence from an outlet’s own video description, picked by matching words, not written by AI.'
+    ? 'Each day\u2019s biggest stories: the ones the most outlets covered. Under each, the first headline from each side.'
     : 'Recap fills in as the day’s stories come in.'));
 }
 
@@ -327,11 +360,7 @@ async function renderRecap() {
 function renderFraming(box, f) {
   if (!f?.headlines) return;
   const base = `${f.headlines} headlines from ${f.stories} stories both Left and Right covered this week`;
-  if (!f.left.length && !f.right.length) {
-    box.append(el('h2', 'group-title', 'Words Each Side Used More'),
-      el('p', 'group-note', `No word separates the sides yet. Across ${base}, every difference in wording could be chance.`));
-    return;
-  }
+  if (!f.left.length && !f.right.length) return;      // nothing to show yet: an empty section read as broken
   for (const [side, label] of [['left', 'Left'], ['right', 'Right']]) {
     if (!f[side].length) continue;
     const group = el('div', 'group');
@@ -347,6 +376,18 @@ function renderFraming(box, f) {
     box.append(el('h2', 'group-title', `Words ${label} Outlets Used More`), group);
   }
   box.append(el('p', 'group-note', `From ${base}, each outlet counted once per story. Only differences too big to be chance are shown. Tap a word to see its stories.`));
+}
+
+function openRecapList(title, list, s) {
+  leaveFeed();
+  place = ''; query = '';
+  pushedList = { title, stories: list };
+  searchFrom = 'recap';
+  renderBar();
+  onScrollStart();
+  pageOpen = false;
+  start({ story: s.id });
+  show('recap', { pushed: true });
 }
 
 function openStory(s, clip) {
@@ -397,8 +438,7 @@ async function renderWorld() {
       row.type = 'button';
       const name = el('span', 'place');
       name.append(el('i', '', COUNTRY[c.country]?.[1] ?? '\u{1F30D}'), COUNTRY[c.country]?.[0] ?? c.country);
-      const tail = el('span', 'count', String(c.stories));
-      tail.setAttribute('aria-label', `${c.stories} stories`);
+      const tail = el('span', 'count', `${c.stories} ${c.stories === 1 ? 'story' : 'stories'}`);     // a bare number read as clips or stories
       const end = el('span', 'tail');
       end.append(tail);
       row.append(name, end);
@@ -412,9 +452,10 @@ async function renderWorld() {
 
 async function goTo(country) {
   everything = everything || await loadEverything();
+  leaveFeed();
   place = country;
   lastPlace = country;
-  query = '';
+  query = ''; pushedList = null;
   renderBar();
   onScrollStart();
   pageOpen = false;
@@ -450,9 +491,11 @@ function renderRecent() {
   box.append(group);
 }
 
-async function runSearch(q, from = 'search') {
+// at: a story id to open on (a tapped result), else the first match.
+async function runSearch(q, from = 'search', at) {
+  leaveFeed();
   query = q;
-  place = '';
+  place = ''; pushedList = null;
   searchFrom = from;
   if (from === 'search') store.set('recentSearches', [q, ...store.get('recentSearches', []).filter((r) => r !== q)].slice(0, RECENT_MAX));
   $('#search-input').blur();
@@ -463,22 +506,37 @@ async function runSearch(q, from = 'search') {
   stories = [];
   show(from, { pushed: true });
   everything = everything || await loadEverything();
-  start();
+  start(at && { story: at });
 }
 $('#search-form').onsubmit = (e) => {
   e.preventDefault();
   const q = $('#search-input').value.trim();
   if (q && feed) runSearch(q);
 };
-// How many stories match as you type, and that Search on the keyboard opens them.
-$('#search-input').oninput = async (e) => {
-  const q = e.target.value.trim(), hint = $('#search-hint');
-  if (!q || !feed) { hint.textContent = ''; return; }
+// The matching headlines as you type, in the order they'd play; tap one to watch from it, or Search to watch them all.
+async function showResults() {
+  const input = $('#search-input'), q = input.value.trim(), hint = $('#search-hint'), box = $('#search-results');
+  $('#search-recent').hidden = !!q;
+  box.textContent = '';
+  if (!q || !feed) { hint.textContent = ''; if (!q) renderRecent(); return; }
   everything = everything || await loadEverything();
-  if (e.target.value.trim() !== q) return;      // you typed on while it loaded
-  const n = matches(everything, q).length;
-  hint.textContent = n ? `${n} ${n === 1 ? 'story matches' : 'stories match'}. Press Search to watch ${n === 1 ? 'it' : 'them'}.` : 'No stories match.';
-};
+  if (input.value.trim() !== q) return;      // you typed on while it loaded
+  const found = orderStories(matches(everything, q));
+  box.textContent = '';
+  hint.textContent = found.length ? '' : 'No stories match.';
+  if (!found.length) return;
+  const group = el('div', 'group');
+  for (const s of found) {
+    const row = el('button', 'cell headline');
+    row.type = 'button';
+    const outlets = new Set(s.clips.map((c) => c.channel)).size;
+    row.append(el('span', 'headline-title', s.headline), el('span', 'headline-sub', `${outlets} ${outlets === 1 ? 'outlet' : 'outlets'} · ${ago(s.updated)}`));
+    row.onclick = () => runSearch(q, 'search', s.id);
+    group.append(row);
+  }
+  box.append(el('h2', 'group-title', `${found.length} ${found.length === 1 ? 'Story' : 'Stories'}`), group);
+}
+$('#search-input').oninput = showResults;
 
 async function loadEverything() {
   try {
@@ -522,7 +580,7 @@ function renderStory(s, si) {
     seg.setAttribute('role', 'group');
     seg.setAttribute('aria-label', 'Rating of the outlets covering this story');
     for (const [col, label] of Object.entries(COLUMNS)) {
-      if (col === 'unrated') continue;      // not rated clips still come last, with their rating on the clip: a fourth segment crowded the row
+      if (!SIDES.includes(col)) continue;      // State-funded and Not rated come last with their own ticks and byline: a fourth segment crowded the row
       const b = el('button', '', label);      // a side with no outlets stays visible but off: that gap is information
       b.type = 'button';
       b.dataset.column = col;
@@ -539,8 +597,11 @@ function renderStory(s, si) {
     }
 
     const clips = el('div', 'clips');
-    const ticks = el('div', 'ticks');
-    s.clips.forEach((c) => {
+    const ticks = el('div', 'ticks' + (s.clips.length < 2 ? ' single' : ''));
+    // Ticks sit under their side's segment, in its colour, so a story's balance shows at a glance and position
+    // tells the sides apart without colour. Clips off the Left/Right scale get a small group of their own at the end.
+    const groups = {}, groupOf = (c) => (s.topic === 'sports' ? 'all' : SIDES.includes(c.column) ? c.column : 'rest');
+    s.clips.forEach((c, ci) => {
       const clip = el('article', 'clip');
       const slot = el('div', 'slot');
       if (videosOn()) {
@@ -549,13 +610,24 @@ function renderStory(s, si) {
         img.dataset.src = `https://i.ytimg.com/vi/${c.id}/hqdefault.jpg`;     // set by showThumbs when the story comes up
         slot.append(img, el('div', 'msg'));
       } else {
-        const off = el('div', 'off');
+        // Text Only: how each side put it, instead of the same grey box on every clip. Nothing here loads from YouTube.
+        const off = el('div', 'textcard');
+        const heads = s.topic === 'sports' ? s.clips.slice(0, 3).map((k) => [null, k]) : Object.entries(sideHeads(s));
+        off.append(el('p', 'textcard-title', s.topic === 'sports' ? 'Who Covered It' : 'How Each Side Put It'));
+        for (const [col, k] of heads) {
+          const line = el('div', 'textcard-line' + (k.id === c.id ? ' now' : ''));
+          if (col) line.dataset.column = col;
+          line.append(el('span', 'textcard-by', col ? `${COLUMNS[col]} \u00b7 ${k.channel}` : k.channel), el('span', 'textcard-head', k.title));
+          off.append(line);
+        }
         const on = el('button', 'filled', 'Turn On Videos');
         on.type = 'button';
         on.onclick = () => { chooseVideos(true); onScrollStart(); draw({ story: s.id, clip: c.id }); };    // same stories, now with video
         const open = el('a', '', 'Watch on YouTube');
         open.href = `https://www.youtube.com/watch?v=${c.id}`; open.target = '_blank'; open.rel = 'noopener';
-        off.append(el('b', '', 'Videos Are Off'), el('span', '', 'YouTube can set cookies on this device when they\u2019re on.'), on, open);
+        const actions = el('div', 'textcard-actions');
+        actions.append(on, open);
+        off.append(actions, el('p', 'textcard-note', 'Videos play from YouTube, which can set cookies on this device.'));
         slot.append(off);
       }
 
@@ -576,8 +648,14 @@ function renderStory(s, si) {
       meta.append(row);
       clip.append(slot, meta);
       clips.append(clip);
-      ticks.append(el('i'));
+      const t = el('i');
+      t.dataset.i = ci;
+      t.dataset.column = c.column;
+      (groups[groupOf(c)] ||= el('span', `tg ${groupOf(c)}`)).append(t);
     });
+    if (s.topic === 'sports') ticks.append(groups.all);
+    else ticks.append(...SIDES.map((k) => groups[k] || el('span', `tg ${k}`)), ...(groups.rest ? [groups.rest] : []));
+    if (groups.rest) { sec.classList.add('has-rest'); sec.style.setProperty('--rest-w', `${groups.rest.children.length * 8}px`); }
     let t = 0;
     clips.addEventListener('scroll', () => { onScrollStart(); clearTimeout(t); t = setTimeout(settle, 140); }, { passive: true });
     sec.append(segRow, ticks, clips);
@@ -588,10 +666,10 @@ function renderStory(s, si) {
 function showEnd() {
   ended = true;
   const sec = el('section', 'story end');
-  sec.append(el('p', '', query ? 'That\u2019s every match from the last two days.' : place ? `That\u2019s everything from ${COUNTRY[place]?.[0] ?? place} in the last two days.` : 'That\u2019s everything from the last two days.'));
-  const b = el('button', 'filled', place ? 'Take Me Somewhere Else' : 'Check for New Stories');
+  sec.append(el('p', '', pushedList ? 'That’s every story in this list.' : query ? 'That\u2019s every match from the last two days.' : place ? `That\u2019s everything from ${COUNTRY[place]?.[0] ?? place} in the last two days.` : 'That\u2019s everything from the last two days.'));
+  const b = el('button', 'filled', place ? 'Take Me Somewhere Else' : pushedList ? 'Back to Recap' : 'Check for New Stories');
   b.type = 'button';
-  b.onclick = place ? takeMeSomewhere : refreshFeed;
+  b.onclick = place ? takeMeSomewhere : pushedList ? () => $('#back').click() : refreshFeed;
   sec.append(b);
   feedEl.append(sec);
 }
@@ -612,7 +690,7 @@ function spread(list) {
 const inTopic = (s) => (topic === 'all' ? settings.sportsInAll || s.topic !== 'sports' : (s.tags || []).includes(topic));
 
 async function loadMore() {
-  if (query || ended || loadingMore || !stories.length) return;   // a search already shows every match
+  if (query || pushedList || ended || loadingMore || !stories.length) return;   // a search or a Recap list already shows all of itself
   loadingMore = true;
   const run = startRun;
   everything = everything || await loadEverything();
@@ -629,6 +707,15 @@ async function loadMore() {
   if (!reserve.length) showEnd();
 }
 
+// A tip, like "Tap the video to start": shown once per visit (once ever with device), and gone after FLASH_MS.
+const hinted = new Set();
+function hint(text, device = false) {
+  const ever = store.get('hinted', []);
+  if (hinted.has(text) || (device && ever.includes(text))) return;
+  hinted.add(text);
+  if (device) store.set('hinted', [...ever, text]);
+  flash(text);
+}
 function flash(text) {
   showHint(text);
   clearTimeout(flashTimer);
@@ -667,7 +754,7 @@ function markPosition(s, c) {
     b.classList.toggle('on', on);
     if (on) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current');
   });
-  sec.querySelectorAll('.ticks i').forEach((t, i) => t.classList.toggle('on', i === c));
+  sec.querySelectorAll('.ticks i').forEach((t) => t.classList.toggle('on', +t.dataset.i === c));
 }
 
 // ---------------------------------------------------------------- navigation
@@ -686,12 +773,19 @@ function goStory(d) {
   const t = Math.max(0, Math.min(feedEl.children.length - 1, s + d));
   feedEl.scrollTo({ top: t * feedEl.clientHeight, behavior: SMOOTH });
 }
-function goClip(d) {
-  const [s, c] = current();
-  const sc = clipsEl(s);
-  const n = stories[s].clips.length;
-  if (c + d >= n && d > 0) return goStory(1);          // past the last side -> next story
-  sc.scrollTo({ left: Math.max(0, Math.min(n - 1, c + d)) * sc.clientWidth, behavior: SMOOTH });
+// When a clip ends: one clip from each side, then the next story. The first clips are one per side (the pipeline
+// mixes them), so that's the first k, visited in order from where you are: Center, Right, then back to Left.
+let played = new Set();
+function advance() {
+  const s = stories[activeS];
+  if (!s) return;
+  played.add(activeC);
+  const k = Math.min(s.clips.length, s.topic === 'sports' ? 3 : new Set(s.clips.map((c) => c.column).filter((c) => SIDES.includes(c))).size || 1);
+  const next = activeC < k ? [...Array(k).keys()].map((j) => (activeC + 1 + j) % k).find((i) => !played.has(i)) : undefined;
+  autoAdvance = true;
+  if (next === undefined) return goStory(1);
+  const sc = clipsEl(activeS);
+  sc.scrollTo({ left: next * sc.clientWidth, behavior: SMOOTH });
 }
 function jumpToColumn(si, column) {
   const ci = stories[si].clips.findIndex((c) => c.column === column);
@@ -705,8 +799,8 @@ function onScrollStart() {
   scrolling = true;
   clearTimeout(watchTimer);
   if (playerReady) player.pauseVideo();
-  wrap.classList.add('off');
-  gesture.hidden = true;
+  wrap.classList.add('away');
+  if (!g0?.axis) gesture.hidden = true;     // mid-drag, the layer holds your finger: hiding it would drop the drag
 }
 
 function settle() {
@@ -718,8 +812,9 @@ function settle() {
     return;
   }
   const [s, c] = current();
+  if (s !== activeS) played = new Set();
   if (s !== activeS) {          // a new story opens on the side you were watching, if it has that side
-    const ci = stories[s].clips.findIndex((k) => (place ? k.country === place : k.column === side));
+    const ci = stories[s].clips.findIndex((k) => (place ? k.country === place : k.column === openSide()));
     if (ci > 0 && ci !== c) {
       clipsEl(s).scrollLeft = ci * clipsEl(s).clientWidth;
       clearTimeout(feedTimer);
@@ -747,12 +842,7 @@ function showThumbs(si, ci) {
 }
 
 function hintSideways() {
-  const shown = store.get('sidewaysHints', 0);
-  if (store.get('knowsSideways', false) || shown >= SIDEWAYS_HINTS || stories[activeS]?.clips.length < 2) return;
-  store.set('sidewaysHints', shown + 1);
-  showHint(SIDEWAYS_HINT);
-  clearTimeout(hintTimer);
-  hintTimer = setTimeout(() => { if (hintEl.textContent === SIDEWAYS_HINT) showHint(''); }, SIDEWAYS_HINT_MS);
+  if (!store.get('knowsSideways', false) && stories[activeS]?.clips.length > 1) hint(SIDEWAYS_HINT, true);
 }
 
 function activate(s, c) {
@@ -769,23 +859,24 @@ function activate(s, c) {
 }
 
 function placePlayer(s, c) {
+  if (!videosOn()) { wrap.hidden = gesture.hidden = true; return; }     // rotating (a resize) put a black box over Text Only
   const slot = storyEl(s).querySelectorAll('.slot')[c];
   const r = slot.getBoundingClientRect();
   Object.assign(wrap.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
   Object.assign(gesture.style, { left: `${r.left}px`, top: `${r.top + r.height * GESTURE_TOP}px`, width: `${r.width}px`, height: `${r.height * GESTURE_HEIGHT}px` });
   wrap.hidden = false;
-  wrap.classList.remove('off');
+  wrap.classList.remove('away');
   gesture.hidden = !unlocked;     // before the first real tap, taps must reach the YouTube player itself
 }
 
 // ---------------------------------------------------------------- player
 function armPlayCheck() {
   clearTimeout(playCheck);
-  if (!unlocked) { showHint('Tap the video to start'); return; }
+  if (!unlocked) { hint('Tap the video to start'); return; }
   playCheck = setTimeout(() => {
     if (!playing) {               // iOS refused to start: hand the next tap to the player itself
       gesture.hidden = true;
-      showHint('Tap the video to play');
+      hint('Tap the video to play');
     }
   }, PLAY_CHECK_MS);
 }
@@ -805,7 +896,7 @@ function onState(e) {
   }
   if (e.data === S.ENDED) {
     markWatched(currentId);
-    if (settings.auto) { autoAdvance = true; goClip(1); }
+    if (settings.auto) advance();
   }
 }
 
@@ -819,9 +910,9 @@ function onError() {
     const a = el('a', '', 'Open in YouTube'); a.href = `https://www.youtube.com/watch?v=${id}`; a.target = '_blank';
     msg.append('This clip can’t play inside the app. ', a);
   }
-  wrap.classList.add('off');
+  wrap.classList.add('away');
   gesture.hidden = false;
-  setTimeout(() => { if (currentId === id) { autoAdvance = true; goClip(1); } }, 2500);
+  setTimeout(() => { if (currentId === id) advance(); }, 2500);
 }
 
 function toggleMute() {
@@ -858,18 +949,43 @@ async function createPlayer(firstId) {
 }
 
 // ---------------------------------------------------------------- gestures on top of the video
+// g0: the touch in progress. axis: 'y' (stories) or 'x' (outlets) once it moved DRAG_START, else still a possible tap.
 let g0 = null;
+const dragged = (g) => (g.axis === 'y' ? feedEl : clipsEl(g.s));
 gesture.addEventListener('pointerdown', (e) => {
   document.activeElement?.blur();      // the touchstart handler below would otherwise leave the keyboard up
-  g0 = { x: e.clientX, y: e.clientY, t: Date.now() };
+  const [s] = current();
+  g0 = { x: e.clientX, y: e.clientY, t: Date.now(), axis: null, s, top: feedEl.scrollTop, left: clipsEl(s)?.scrollLeft ?? 0 };
   try { gesture.setPointerCapture(e.pointerId); } catch { /* not supported */ }
 });
+gesture.addEventListener('pointermove', (e) => {
+  if (!g0) return;
+  const dx = e.clientX - g0.x, dy = e.clientY - g0.y;
+  if (!g0.axis) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < DRAG_START) return;
+    g0.axis = Math.abs(dy) > Math.abs(dx) ? 'y' : 'x';
+    if (!dragged(g0)) { g0 = null; return; }
+    dragged(g0).style.scrollSnapType = 'none';     // snapping would fight the finger
+  }
+  if (g0.axis === 'y') feedEl.scrollTop = g0.top - dy;
+  else dragged(g0).scrollLeft = g0.left - dx;
+});
+// Let go: glide on, or spring back, then snapping takes over again.
+function letGo(g, d, dt) {
+  const el = dragged(g), size = g.axis === 'y' ? el.clientHeight : el.clientWidth;
+  const from = g.axis === 'y' ? g.s : Math.round(g.left / size);
+  const step = Math.abs(d) > size * DRAG_COMMIT || Math.abs(d) / Math.max(dt, 1) > FLICK_PX_MS ? (d < 0 ? 1 : -1) : 0;
+  const last = g.axis === 'y' ? feedEl.children.length - 1 : stories[g.s].clips.length - 1;
+  const to = Math.max(0, Math.min(last, from + step));
+  el.scrollTo({ [g.axis === 'y' ? 'top' : 'left']: to * size, behavior: SMOOTH });
+  setTimeout(() => { el.style.scrollSnapType = ''; }, 450);
+  if (g.axis === 'x' && from + step > last) setTimeout(() => goStory(1), 200);      // past the last outlet: the next story
+}
 gesture.addEventListener('pointerup', (e) => {
   if (!g0) return;
-  const dx = e.clientX - g0.x, dy = e.clientY - g0.y, dt = Date.now() - g0.t;
+  const g = g0, dx = e.clientX - g.x, dy = e.clientY - g.y, dt = Date.now() - g.t;
   g0 = null;
-  if (Math.abs(dy) > 50 && Math.abs(dy) > Math.abs(dx)) return goStory(dy < 0 ? 1 : -1);
-  if (Math.abs(dx) > 40) return goClip(dx < 0 ? 1 : -1);
+  if (g.axis) return letGo(g, g.axis === 'y' ? dy : dx, dt);
   if (dt >= 400 || !playerReady) return;
   // Double-tap the left or right half to go back or forward, as on YouTube; keep tapping to skip more.
   // So a single tap (pause/play) waits DOUBLE_TAP_MS to be sure it isn't the first of two.
@@ -893,7 +1009,7 @@ function skip(d) {
   clearTimeout(skipTimer);
   skipTimer = setTimeout(() => f.classList.remove('on'), 600);
 }
-gesture.addEventListener('pointercancel', () => { g0 = null; });
+gesture.addEventListener('pointercancel', () => { const g = g0; g0 = null; if (g?.axis) letGo(g, 0, 1e9); });     // spring back
 // Without this, Chromium treats a flick here as a fling and swallows the next tap anywhere on the page.
 gesture.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
 
@@ -935,11 +1051,6 @@ function chooseVideos(on) {
   store.set('consent', consent);
   document.documentElement.classList.toggle('videos', on);
 }
-$('#welcome-next').onclick = () => {
-  $('#welcome-1').hidden = true;
-  $('#welcome-2').hidden = false;
-  $('#welcome-2 h1').focus?.();
-};
 function finishWelcome(on) {
   chooseVideos(on);
   welcomeEl.close();
@@ -966,7 +1077,7 @@ function syncSettings() {
 for (const t of toggles) {
   $(`#set-${t}`).onchange = (e) => { settings[t] = e.target.checked; saveSettings(); };
 }
-$('#set-side').onchange = (e) => { settings.side = e.target.value; side = settings.side || null; saveSettings(); };
+$('#set-side').onchange = (e) => { settings.side = e.target.value; saveSettings(); };
 $('#set-videos').onchange = (e) => {
   chooseVideos(e.target.checked);
   if (e.target.checked) redraw = true;
@@ -1017,21 +1128,26 @@ function gap(ms) {
   return m < 60 ? `${m}m` : `${h}h${h < 10 && m % 60 ? ` ${m % 60}m` : ''}`;
 }
 // Outlets in the order they first posted about the story, and how fast it crossed regions.
+// Only for a story under FIRST_MAX_H old, and from the same clips as the list above it. On a story that ran for days,
+// "first" only meant "oldest clip still in the two-day window", and contradicted the list.
+const FIRST_MAX_H = 12, FIRST_ROWS = 6;
 function timeline(s) {
-  const at = (c) => Date.parse(c.since || c.published);
+  const at = (c) => Date.parse(c.published);
   const order = [...s.clips].sort((a, b) => at(a) - at(b)), t0 = at(order[0]);
+  if (Date.now() - t0 > FIRST_MAX_H * 3600e3) return [];
   const group = el('div', 'group');
-  order.forEach((c, i) => {
+  order.slice(0, FIRST_ROWS).forEach((c, i) => {
     const row = el('div', 'cell');
     row.append(el('span', '', `${COUNTRY[c.country]?.[1] ?? ''} ${c.channel}`.trim()),
-      el('span', 'count', i ? `+${gap(at(c) - t0)}` : `First, ${ago(c.since || c.published)}`));
+      el('span', 'count', i ? `+${gap(at(c) - t0)}` : `First, ${ago(c.published)}`));
     group.append(row);
   });
+  if (order.length > FIRST_ROWS) group.append(el('div', 'cell', `${order.length - FIRST_ROWS} more`));
   const reached = new Map();
   for (const c of order) if (!reached.has(c.region)) reached.set(c.region, at(c));
   const spread = reached.size > 1 ? `It reached ${reached.size} regions within ${gap(Math.max(...reached.values()) - t0)}. ` : '';
   return [el('h2', 'group-title', 'Who Covered It First'), group,
-    el('p', 'group-note', `${spread}Times are when each outlet first posted a clip about it on YouTube, which can trail its other reporting.`)];
+    el('p', 'group-note', `${spread}By when each clip above went up on YouTube, which can come after an outlet's live or written reporting.`)];
 }
 
 // ---------------------------------------------------------------- share
@@ -1084,30 +1200,40 @@ async function shareStory(s, currentClip) {
     const files = blob ? [new File([blob], 'swipe-news.png', { type: 'image/png' })] : [];
     if (files.length && navigator.canShare?.({ files })) return await navigator.share({ ...data, files });
     if (navigator.share) return await navigator.share(data);
+  } catch (e) {
+    if (e?.name === 'AbortError') return;      // you closed the share sheet
+    // some browsers have navigator.share but refuse it (NotAllowedError): copy the link instead
+  }
+  try {
     await navigator.clipboard.writeText(url);
     flash('Link copied');
-  } catch (e) {
-    if (e?.name !== 'AbortError') flash('Couldn’t share this story.');      // AbortError: you closed the share sheet
+  } catch {
+    flash('Couldn’t share this story.');
   }
 }
 
 function openCompare(si, currentClip) {
   const s = stories[si], box = $('#compare-body');
   box.textContent = '';
+  if (!store.get('knowsRatings', false) && s.topic !== 'sports') {      // the first Compare explains the sides, not the welcome
+    store.set('knowsRatings', true);
+    box.append(el('p', 'compare-intro', 'Left, Center and Right are Media Bias/Fact Check\u2019s ratings of each outlet as a whole, on a US left\u2013right scale, not of these headlines. Each headline shows its outlet\u2019s exact rating, like Lean Left. Outlets a government funds have their own group.'));
+  }
   for (const [col, label] of Object.entries(COLUMNS)) {
     const clips = s.clips.filter((c) => c.column === col);
-    if (s.topic !== 'sports' && col !== 'unrated' && !clips.length) {
+    if (s.topic !== 'sports' && SIDES.includes(col) && !clips.length) {
       box.append(el('h2', 'group-title', label), el('p', 'group-note', 'No coverage among the outlets here.'));
       continue;
     }
     if (!clips.length) continue;
     if (s.topic !== 'sports') box.append(el('h2', 'group-title', label));     // left and right mean nothing for sport
+    if (s.topic !== 'sports' && col === 'state') box.append(el('p', 'group-note state-note', 'YouTube notes that a government funds these outlets, in whole or in part, so they aren\u2019t placed on the US left\u2013right scale.'));
     const group = el('div', 'group');
     for (const c of clips) {
       const b = el('button', 'cell headline' + (c.id === currentClip ? ' now' : ''));
       b.type = 'button';
       if (c.id === currentClip) b.setAttribute('aria-current', 'true');
-      b.append(el('span', 'headline-title', c.title), el('span', 'headline-sub', `${c.channel} \u00b7 ${byline(c, s)}`));
+      b.append(el('span', 'headline-title', c.title), el('span', 'headline-sub', `${c.channel} \u00b7 ${byline(c, s, true)}`));
       if (c.note && settings.notes) b.append(el('span', 'headline-sub', c.note));     // in full: the player's box can cut it off
       b.onclick = () => {
         const ci = s.clips.indexOf(c), sc = clipsEl(si);
@@ -1125,7 +1251,7 @@ function openCompare(si, currentClip) {
   box.append(share);
   const yt = el('a', 'watch-link', 'Watch This Clip on YouTube');
   yt.href = `https://www.youtube.com/watch?v=${currentClip}`; yt.target = '_blank'; yt.rel = 'noopener';
-  box.append(yt, el('p', 'group-note', 'Headlines from YouTube videos. Sides are outlet ratings from Media Bias/Fact Check, not judgements of these headlines.'));
+  box.append(yt, el('p', 'group-note', 'Headlines from YouTube videos. Left, Center and Right are Media Bias/Fact Check ratings of whole outlets on a US left\u2013right scale, not judgements of these headlines.'));
   if (playerReady) player.pauseVideo();
   compareEl.showModal();
 }
@@ -1139,7 +1265,9 @@ function start(at, extra) {
   startRun++;
   reserve = null;
   ended = false;
-  if (query) {
+  if (pushedList) {
+    stories = pushedList.stories;
+  } else if (query) {
     stories = orderStories(matches(everything || feed.stories || [], query));
   } else if (place) {
     const all = orderStories(placeList(everything || [], place));
@@ -1168,6 +1296,7 @@ function start(at, extra) {
 
 // Draws `stories` and opens on `at` if it's there, else on the first story.
 function draw(at) {
+  played = new Set();
   currentId = null;
   activeS = -1;
   $('#bar-share').hidden = !stories.length;
@@ -1182,7 +1311,7 @@ function draw(at) {
   }
   setStatus('');
   render();
-  if (query || ended) showEnd();
+  if (query || pushedList || ended) showEnd();
   const si = at ? stories.findIndex((s) => s.id === at.story) : -1;
   const ci = si < 0 ? 0 : Math.max(0, stories[si].clips.findIndex((c) => c.id === at.clip));
   feedEl.scrollTop = Math.max(si, 0) * feedEl.clientHeight;
