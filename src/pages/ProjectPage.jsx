@@ -26,6 +26,7 @@ export default function ProjectPage() {
             {project.id === "swipe-news" && <a href={project.url} className="action action-primary" target="_blank" rel="noreferrer">Open the app <span aria-hidden="true">↗</span></a>}
             {project.url && project.id !== "swipe-news" && <Link to={project.url} className="action action-primary">{project.id === "lol-forecaster" ? "Try the forecaster" : "Demo status"} <span aria-hidden="true">↗</span></Link>}
             {project.source && <a href={project.source} className="action" target="_blank" rel="noreferrer">View source code <span aria-hidden="true">↗</span></a>}
+            {project.support && <a href={project.support} className="action" target="_blank" rel="noreferrer">Support on Ko-fi <span aria-hidden="true">↗</span></a>}
           </div>
         </div>
         <div><ProjectMark project={project} /></div>
