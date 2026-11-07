@@ -8,8 +8,11 @@
 //   - Run a daily node-cron job that incrementally refreshes data from the
 //     Riot API into Neon — keeping the dashboard current without a redeploy.
 //   - Start the Swipe News feed build every 10 minutes (see swipeNews.js).
+//   - Swipe News: keep anonymous daily usage totals and show them at /swipe-news-stats (swipeNewsStats.js), and give
+//     shared story links a preview of that story (swipeNewsPreview.js).
 
 import "dotenv/config";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -20,6 +23,8 @@ import { sql, ensureSchema, getMatches, getRoleMatchups, getMatchTeams } from ".
 import { refreshFromRiot } from "./riot.js";
 import { PLAYERS, publicPlayer } from "./players.js";
 import { makeFeedRefresher } from "./swipeNews.js";
+import { cleanEvents, makeStats, statsAuth } from "./swipeNewsStats.js";
+import { makePreview } from "./swipeNewsPreview.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, "..", "dist");
@@ -67,6 +72,28 @@ app.use("/swipe-news", (_req, _res, next) => {
   next();
 });
 
+// Anonymous daily totals: the app posts a small batch of counts when you leave it (sendBeacon).
+const stats = makeStats(sql);
+app.post("/api/swipe-news/events", express.json({ limit: "4kb", type: () => true }), async (req, res) => {
+  const events = cleanEvents(req.body);
+  res.status(204).end();
+  if (events.length) await stats.record(events).catch((err) => console.error("[swipe-news] counts not saved:", err.message || err));
+});
+const statsGate = statsAuth(process.env.SWIPE_STATS_PASSWORD);
+app.get("/api/swipe-news/stats", statsGate, async (_req, res) => {
+  try {
+    res.json({ rows: await stats.rows(60) });
+  } catch (err) {
+    res.status(500).json({ error: String(err.message || err) });
+  }
+});
+app.get("/swipe-news-stats", statsGate, (_req, res) => res.sendFile(path.join(__dirname, "swipe-news-stats.html")));
+
+// A shared story's link previews that story (WhatsApp, iMessage, social media).
+const indexFile = path.join(DIST_DIR, "swipe-news", "index.html");
+let indexHtml = null;
+app.get(["/swipe-news/", "/swipe-news/index.html"], makePreview({ readIndex: async () => (indexHtml ??= await readFile(indexFile, "utf8")) }));
+
 // --- Static SPA + history fallback ----------------------------------------
 
 app.use(express.static(DIST_DIR));
@@ -98,6 +125,7 @@ cron.schedule("17 6 * * *", () => runRefresh("daily"), { timezone: "UTC" });
 // --- Boot ------------------------------------------------------------------
 
 ensureSchema()
+  .then(() => stats.ensure())
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Server running at http://localhost:${PORT}`);

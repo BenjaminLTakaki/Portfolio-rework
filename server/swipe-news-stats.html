@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Swipe News Stats</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f5f7; --surface: #ffffff; --ink: #16171b; --muted: #5b5f68; --faint: #8a8f99; --hair: #e3e4e8;
+    --mark: #2f7ae5;            /* one hue: validated for light (dataviz validator) */
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0b0c0f; --surface: #16171b; --ink: #f4f5f7; --muted: #a9aeb7; --faint: #767b85; --hair: #2a2c32; --mark: #3f8cf7; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; max-width: 980px; padding: 24px 16px 64px; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--font); }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 0 0 4px; }
+  .note { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+  section { background: var(--surface); border-radius: 12px; padding: 16px; margin-top: 16px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
+  .kpi { background: var(--surface); border-radius: 12px; padding: 14px; }
+  .kpi b { display: block; font-size: 30px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .kpi span { display: block; color: var(--muted); font-size: 13px; }
+  .kpi small { display: block; color: var(--faint); font-size: 12px; margin-top: 4px; }
+  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .cols section { margin-top: 0; }
+  .grid-wrap { display: grid; gap: 16px; margin-top: 16px; }
+  .bars { display: grid; gap: 10px; }
+  .bar { display: grid; grid-template-columns: 9.5em 1fr 4.5em; gap: 10px; align-items: center; font-size: 14px; }
+  .bar span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar i { height: 10px; border-radius: 0 4px 4px 0; background: var(--mark); min-width: 2px; }
+  .bar .v { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .empty { color: var(--faint); font-size: 14px; }
+  #daily { width: 100%; height: 180px; display: block; }
+  #daily rect.hit { fill: transparent; }
+  #daily .axis { fill: var(--faint); font-size: 11px; }
+  #daily .grid { stroke: var(--hair); }
+  #tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg); padding: 6px 8px; border-radius: 6px; font-size: 12px; display: none; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+  td, th { padding: 6px 8px; border-bottom: 1px solid var(--hair); text-align: right; }
+  td:first-child, th:first-child { text-align: left; }
+  details { margin-top: 16px; }
+  .post { display: grid; grid-template-columns: minmax(0, 300px) 1fr; gap: 16px; align-items: start; }
+  @media (max-width: 640px) { .post { grid-template-columns: 1fr; } }
+  .post img { width: 100%; border-radius: 10px; display: block; }
+  textarea { width: 100%; min-height: 190px; font: 14px/1.4 var(--font); color: var(--ink); background: var(--bg); border: 1px solid var(--hair); border-radius: 8px; padding: 10px; }
+  select { max-width: 100%; }
+  button, select, .btn { font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--hair); background: var(--bg); color: var(--ink); cursor: pointer; text-decoration: none; display: inline-block; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+</style>
+</head>
+<body>
+<h1>Swipe News</h1>
+<p class="note">Anonymous daily totals from the app: no cookies, IDs or addresses. A visitor is one device on one day. Last 7 days, against the 7 before.</p>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="grid-wrap">
+  <section>
+    <h2>Visitors per day</h2>
+    <p class="note">Last 30 days. Hover a day for its numbers.</p>
+    <svg id="daily" role="img" aria-label="Visitors per day, last 30 days"></svg>
+  </section>
+  <div class="cols">
+    <section>
+      <h2>Where visitors came from</h2>
+      <p class="note">Last 30 days: <code>?ref=</code> on links you post, else the site that linked here. Most visits have neither.</p>
+      <div class="bars" id="refs"></div>
+    </section>
+    <section>
+      <h2>How long ago they first came</h2>
+      <p class="note">Visits in the last 7 days, by how long ago that device first opened the app. More beyond "first day" means people come back.</p>
+      <div class="bars" id="ages"></div>
+    </section>
+    <section>
+      <h2>Clips watched, by side</h2>
+      <p class="note">Last 7 days.</p>
+      <div class="bars" id="sides"></div>
+    </section>
+    <section>
+      <h2>What people do</h2>
+      <p class="note">Last 7 days.</p>
+      <table id="use"></table>
+    </section>
+  </div>
+</div>
+
+<section>
+  <h2>Today's post</h2>
+  <p class="note">A story from the last day that all three sides covered, as a card to post, with a caption and a link that counts as <code>ref=social</code>.</p>
+  <div class="row"><select id="pick" aria-label="Story for today's post"></select></div>
+  <div class="post" style="margin-top: 12px">
+    <img id="card" alt="Today's share card">
+    <div>
+      <textarea id="caption" aria-label="Caption"></textarea>
+      <div class="row">
+        <a class="btn" id="download" download="swipe-news.png">Download Image</a>
+        <button type="button" id="copy">Copy Caption</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<details>
+  <summary>All daily numbers</summary>
+  <div style="overflow-x: auto"><table id="all"></table></div>
+</details>
+
+<div id="tip" role="tooltip"></div>
+
+<script type="module">
+import { storyCard } from '/swipe-news/card.js';
+
+const $ = (s) => document.querySelector(s);
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+const fmt = (n) => n.toLocaleString('en');
+const day = (t) => new Date(t).toISOString().slice(0, 10);
+const today = day(Date.now());
+const daysBack = (n) => day(Date.now() - n * 864e5);
+
+const { rows } = await (await fetch('/api/swipe-news/stats')).json();
+const byDay = {};
+for (const r of rows) (byDay[r.day] ||= {})[r.name] = r.n;
+const sum = (name, from, to = today) => Object.entries(byDay).filter(([d]) => d > from && d <= to).reduce((a, [, v]) => a + (v[name] || 0), 0);
+const sumWhere = (test, from) => Object.entries(byDay).filter(([d]) => d > from).reduce((a, [, v]) => a + Object.entries(v).filter(([k]) => test(k)).reduce((b, [, n]) => b + n, 0), 0);
+const last7 = daysBack(7), prev7 = daysBack(14), last30 = daysBack(30);
+
+// ---- headline numbers
+function kpi(label, value, before, fmtValue = fmt) {
+  const box = el('div', null, 'kpi');
+  box.append(el('b', fmtValue(value)), el('span', label));
+  if (before != null) {
+    const d = before ? Math.round(((value - before) / before) * 100) : null;
+    box.append(el('small', d == null ? (value ? 'new this week' : 'none the week before') : `${d >= 0 ? '+' : ''}${d}% vs the 7 days before`));
+  }
+  return box;
+}
+const visits = sum('visit', last7), visitsBefore = sum('visit', prev7, last7);
+const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '0%');
+const back = visits - sum('age_0', last7);
+$('#kpis').append(
+  kpi('Visitors', visits, visitsBefore),
+  kpi('New devices', sum('new', last7), sum('new', prev7, last7)),
+  kpi('Came back', back, null, () => pct(back, visits)),
+  kpi('From the Home Screen', sum('homescreen', last7), null, () => pct(sum('homescreen', last7), visits)),
+  kpi('Shares', sum('share', last7), sum('share', prev7, last7)),
+  kpi('Opened a shared link', sum('shared_open', last7), sum('shared_open', prev7, last7)),
+);
+
+// ---- visitors per day: one series, so no legend; hover for the day's numbers
+const svg = $('#daily'), tip = $('#tip'), W = svg.clientWidth || 900, H = 180, padL = 32, padB = 22, padT = 8;
+svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+const days = [...Array(30).keys()].map((i) => daysBack(29 - i));
+const values = days.map((d) => byDay[d]?.visit || 0);
+const max = Math.max(4, ...values), step = (W - padL) / days.length, bw = Math.max(2, step - 2);
+const y = (v) => H - padB - (v / max) * (H - padB - padT);
+const ns = (tag, attrs) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
+for (const v of [0, Math.round(max / 2), max]) {
+  svg.append(ns('line', { x1: padL, x2: W, y1: y(v), y2: y(v), class: 'grid' }));
+  const t = ns('text', { x: padL - 6, y: y(v) + 4, 'text-anchor': 'end', class: 'axis' }); t.textContent = v; svg.append(t);
+}
+days.forEach((d, i) => {
+  const x = padL + i * step + 1, h = H - padB - y(values[i]);
+  if (h > 0) svg.append(ns('path', { d: `M${x},${H - padB} v${-Math.max(0, h - 4)} q0,-4 4,-4 h${bw - 8} q4,0 4,4 v${Math.max(0, h - 4)} z`, fill: 'var(--mark)' }));
+  const hit = ns('rect', { x: padL + i * step, y: padT, width: step, height: H - padT - padB, class: 'hit' });
+  hit.addEventListener('pointermove', (e) => {
+    const v = byDay[d] || {};
+    tip.textContent = `${new Date(d).toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })}: ${v.visit || 0} visitors, ${v.new || 0} new, ${v.share || 0} shares`;
+    tip.style.display = 'block'; tip.style.left = `${Math.min(e.clientX + 12, innerWidth - 260)}px`; tip.style.top = `${e.clientY + 12}px`;
+  });
+  hit.addEventListener('pointerleave', () => { tip.style.display = 'none'; });
+  svg.append(hit);
+});
+for (const i of [0, 29]) {
+  const t = ns('text', { x: padL + i * step + step / 2, y: H - 6, 'text-anchor': i ? 'end' : 'start', class: 'axis' });
+  t.textContent = new Date(days[i]).toLocaleDateString('en', { day: 'numeric', month: 'short' }); svg.append(t);
+}
+
+// ---- ranked/ordered bars, values printed beside them
+function bars(box, items, empty) {
+  if (!items.some(([, n]) => n)) { box.append(el('p', empty, 'empty')); return; }
+  const top = Math.max(...items.map(([, n]) => n));
+  for (const [label, n, extra] of items) {
+    const row = el('div', null, 'bar'), fill = el('i');
+    fill.style.width = `${(n / top) * 100}%`;
+    row.title = `${label}: ${fmt(n)}`;
+    row.append(el('span', label), fill, el('span', extra ?? fmt(n), 'v'));
+    box.append(row);
+  }
+}
+const refs = {};
+for (const [d, v] of Object.entries(byDay)) if (d > last30) for (const [k, n] of Object.entries(v)) if (k.startsWith('ref:')) refs[k.slice(4)] = (refs[k.slice(4)] || 0) + n;
+bars($('#refs'), Object.entries(refs).sort((a, b) => b[1] - a[1]).slice(0, 8), 'Nothing yet. Put ?ref=tiktok (or instagram, bluesky...) on the links you post to see which works.');
+bars($('#ages'), [['First day', 'age_0'], ['Day after', 'age_1'], ['2 to 7 days', 'age_2_7'], ['8 to 30 days', 'age_8_30'], ['31+ days', 'age_31_plus']]
+  .map(([l, k]) => [l, sum(k, last7)]), 'No visits yet.');
+const watched = sumWhere((k) => k.startsWith('watched_'), last7);
+bars($('#sides'), [['Left', 'left'], ['Center', 'center'], ['Right', 'right'], ['State-funded', 'state'], ['Not rated', 'unrated']]
+  .map(([l, k]) => { const n = sum(`watched_${k}`, last7); return [l, n, pct(n, watched)]; }), 'No clips watched yet.');
+const use = $('#use');
+const per = (n) => (visits ? (n / visits).toFixed(1) : '0');
+for (const [label, value] of [
+  ['Stories reached per visit', per(sum('story', last7))],
+  ['Clips watched per visit', per(watched)],
+  ['Videos on', pct(sum('mode_videos', last7), sum('mode_videos', last7) + sum('mode_text', last7))],
+  ['Opened Compare', fmt(sum('compare', last7))],
+  ['Opened Recap', fmt(sum('recap', last7))],
+  ['Searched', fmt(sum('search', last7))],
+  ['Went to a country', fmt(sum('world', last7))],
+]) { const tr = el('tr'); tr.append(el('td', label), el('td', value)); use.append(tr); }
+
+// ---- every number, as a table (the chart's text alternative)
+const names = [...new Set(rows.map((r) => r.name))].sort();
+const all = $('#all'), head = el('tr');
+head.append(el('th', 'Day'), ...names.map((n) => el('th', n)));
+all.append(head);
+for (const d of Object.keys(byDay).sort().reverse()) {
+  const tr = el('tr'); tr.append(el('td', d), ...names.map((n) => el('td', fmt(byDay[d][n] || 0)))); all.append(tr);
+}
+
+// ---- today's post: the biggest story of the last day that all three sides covered
+const feed = await (await fetch(`https://benjaminltakaki.github.io/swipe-news/feed.json?t=${Date.now()}`)).json();
+const outlets = (s) => new Set(s.clips.map((c) => c.channel)).size;
+const SIDES = [['left', 'Left'], ['center', 'Center'], ['right', 'Right']];
+const picks = feed.stories
+  .filter((s) => Date.now() - Date.parse(s.first || s.updated) < 864e5 && SIDES.every(([k]) => s.clips.some((c) => c.column === k)))
+  .sort((a, b) => outlets(b) - outlets(a)).slice(0, 5);
+const pick = $('#pick');
+pick.append(...picks.map((s, i) => { const o = el('option', `${s.headline} (${outlets(s)} outlets)`); o.value = i; return o; }));
+async function showPost() {
+  const s = picks[+pick.value || 0];
+  if (!s) { $('#caption').value = 'No story from the last day was covered by all three sides yet.'; return; }
+  const first = SIDES.map(([k, label]) => [label, s.clips.find((c) => c.column === k)]);
+  const url = `${location.origin}/swipe-news/?story=${encodeURIComponent(s.id)}&clip=${encodeURIComponent(first[1][1].id)}&ref=social`;
+  const blob = await storyCard(s, first[1][1].id);
+  const src = URL.createObjectURL(blob);
+  $('#card').src = src; $('#download').href = src;
+  $('#caption').value = [`Same story, three sides. ${outlets(s)} outlets covered it:`, '',
+    ...first.map(([label, c]) => `${label} (${c.channel}): ${c.title}`), '', `Swipe through every outlet's take: ${url}`].join('\n');
+}
+pick.onchange = showPost;
+$('#copy').onclick = async () => { await navigator.clipboard.writeText($('#caption').value); $('#copy').textContent = 'Copied'; };
+showPost();
+</script>
+</body>
+</html>
