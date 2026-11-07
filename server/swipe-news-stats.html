@@ -105,6 +105,13 @@
   </div>
 </section>
 
+<section>
+  <h2>Instagram</h2>
+  <p class="note" id="ig-note">Checking…</p>
+  <table id="ig-recent"></table>
+  <div class="row"><button type="button" id="ig-run">Post Today's Now</button><span class="note" id="ig-result" style="margin:8px 0 0"></span></div>
+</section>
+
 <details>
   <summary>All daily numbers</summary>
   <div style="overflow-x: auto"><table id="all"></table></div>
@@ -244,6 +251,27 @@ async function showPost() {
 pick.onchange = showPost;
 $('#copy').onclick = async () => { await navigator.clipboard.writeText($('#caption').value); $('#copy').textContent = 'Copied'; };
 showPost();
+
+// ---- Instagram: posts by itself every day around 18:00; this shows what went out, and can post today's now
+async function showInstagram() {
+  const r = await fetch('/api/certior/instagram-status');
+  if (!r.ok) { $('#ig-note').textContent = 'Couldn\u2019t load the Instagram status.'; return; }
+  const { setUp, recent } = await r.json();
+  $('#ig-note').textContent = setUp
+    ? 'Posts the day\u2019s biggest story that all three sides covered, by itself, around 18:00 Dutch time. No story like that: no post that day.'
+    : 'Not set up: add IG_ACCESS_TOKEN on Render to start posting.';
+  const t = $('#ig-recent'); t.textContent = '';
+  for (const x of recent) { const tr = el('tr'); tr.append(el('td', x.day), el('td', x.headline), el('td', x.media_id ? 'Posted' : 'Trying')); t.append(tr); }
+  if (!recent.length && setUp) { const tr = el('tr'); tr.append(el('td', 'Nothing posted yet.')); t.append(tr); }
+  $('#ig-run').disabled = !setUp || recent.some((x) => x.day === today && x.media_id);
+}
+$('#ig-run').onclick = async () => {
+  $('#ig-run').disabled = true; $('#ig-result').textContent = 'Posting\u2026';
+  const r = await (await fetch('/api/certior/instagram-run', { method: 'POST' })).json();
+  $('#ig-result').textContent = r.posted ? `Posted: ${r.posted}` : r.skipped ? `Not posted: ${r.skipped}` : `Failed: ${r.error}`;
+  showInstagram();
+};
+showInstagram();
 </script>
 </body>
 </html>

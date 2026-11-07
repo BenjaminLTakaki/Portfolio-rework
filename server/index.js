@@ -10,7 +10,7 @@
 //   - Certior (the news app, built in the swipe-news repo, formerly Swipe News) at /certior:
 //       start its feed build every 10 minutes (swipeNews.js), keep anonymous daily usage totals and show them at
 //       /certior-stats (swipeNewsStats.js), and give shared story links a preview of that story (swipeNewsPreview.js).
-//       Old /swipe-news addresses redirect to /certior.
+//       Old /swipe-news addresses redirect to /certior. Posts the day's card to Instagram (certiorInstagram.js).
 
 import "dotenv/config";
 import { readFile } from "node:fs/promises";
@@ -26,6 +26,7 @@ import { PLAYERS, publicPlayer } from "./players.js";
 import { makeFeedRefresher, movedTo } from "./swipeNews.js";
 import { cleanEvents, makeStats, statsAuth } from "./swipeNewsStats.js";
 import { makePreview } from "./swipeNewsPreview.js";
+import { makeInstagramPoster, sqlStore } from "./certiorInstagram.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, "..", "dist");
@@ -96,6 +97,35 @@ app.get("/api/swipe-news/stats", statsGate, async (_req, res) => {
 });
 app.get("/certior-stats", statsGate, (_req, res) => res.sendFile(path.join(__dirname, "swipe-news-stats.html")));
 
+// The day's card, posted to Instagram by itself (token in IG_ACCESS_TOKEN; without it this does nothing). It tries at
+// 18:00 Dutch time and again on the next three hours if a try failed; it posts at most once a day.
+const igStore = sqlStore(sql);
+const instagram = makeInstagramPoster({
+  store: igStore,
+  render: async (...args) => (await import("./certiorCard.js")).renderCard(...args),      // loads the canvas only when posting
+  envToken: process.env.IG_ACCESS_TOKEN,
+  publicBase: "https://www.benjamintakaki.com",
+});
+const postToInstagram = () => instagram.run()
+  .then((r) => r.skipped && console.log(`[certior] Instagram: ${r.skipped}`))
+  .catch((err) => console.error("[certior] Instagram post failed:", err.message || err));
+cron.schedule("0 18-21 * * *", postToInstagram, { timezone: "Europe/Amsterdam" });
+app.get("/api/certior/instagram/:file", instagram.image);
+app.get("/api/certior/instagram-status", statsGate, async (_req, res) => {
+  try {
+    res.json({ setUp: !!(process.env.IG_ACCESS_TOKEN || (await igStore.token())), recent: await igStore.recent(7) });
+  } catch (err) {
+    res.status(500).json({ error: String(err.message || err) });
+  }
+});
+app.post("/api/certior/instagram-run", statsGate, async (_req, res) => {
+  try {
+    res.json(await instagram.run());
+  } catch (err) {
+    res.status(502).json({ error: String(err.message || err) });
+  }
+});
+
 // A shared story's link previews that story (WhatsApp, iMessage, social media).
 const indexFile = path.join(DIST_DIR, "certior", "index.html");
 let indexHtml = null;
@@ -133,6 +163,7 @@ cron.schedule("17 6 * * *", () => runRefresh("daily"), { timezone: "UTC" });
 
 ensureSchema()
   .then(() => stats.ensure())
+  .then(() => igStore.ensure())
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Server running at http://localhost:${PORT}`);
