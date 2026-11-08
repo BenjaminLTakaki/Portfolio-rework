@@ -18,15 +18,17 @@ const STORY = {
   ],
 };
 
-test("a Reel Instagram takes: 1080x1920 H.264 4:2:0 with AAC sound, about 11 s, and a JPEG cover", async () => {
+test("a Reel Instagram takes: 1080x1920 H.264 4:2:0 with AAC sound, narrated, about 20 s, and a JPEG cover", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "reel-test-"));
   try {
-    const { mp4, cover, duration } = await renderReel(STORY, { out: path.join(dir, "r.mp4") });
+    // the clips' ids are made up, so no frames: the Reel has to come out without them
+    const { mp4, cover, duration, voiced } = await renderReel(STORY, { out: path.join(dir, "r.mp4") });
     const info = await new Promise((done) => execFile(ffmpeg, ["-hide_banner", "-i", mp4], (_e, _o, err) => done(err)));
     assert.match(info, /Video: h264 .*yuv420p\(tv, bt709.*1080x1920/);
     assert.match(info, /Audio: aac .*48000 Hz, stereo/);
+    assert.ok(voiced, "the voice failed (the first run fetches Kokoro's ~90 MB model)");
     const [, s] = info.match(/Duration: 00:00:(\d+\.\d+)/);
-    assert.ok(Math.abs(+s - duration) < 0.1 && duration > 9 && duration < 14, `${s} s`);
+    assert.ok(Math.abs(+s - duration) < 0.1 && duration > 14 && duration < 32, `${s} s`);
     assert.deepEqual([...(await fs.readFile(cover)).subarray(0, 2)], [0xff, 0xd8]);
     await assert.rejects(renderReel({ ...STORY, clips: STORY.clips.slice(1) }, { out: path.join(dir, "x.mp4") }), /all three sides/);
   } finally {
