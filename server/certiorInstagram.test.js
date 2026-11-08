@@ -49,9 +49,9 @@ function fakeInstagram({ statuses = ["IN_PROGRESS", "FINISHED"], fail } = {}) {
   const calls = [];
   const fetchFn = async (url, init = {}) => {
     const u = new URL(url), body = init.body ? Object.fromEntries(init.body) : {};
-    calls.push([init.method || "GET", u.hostname === "graph.instagram.com" ? u.pathname : "feed", { ...Object.fromEntries(u.searchParams), ...body }]);
+    calls.push([init.method || "GET", u.hostname.startsWith("graph.") ? u.pathname : "feed", { ...Object.fromEntries(u.searchParams), ...body }, u.hostname]);
     const json = (data, ok = true) => ({ ok, json: async () => data });
-    if (u.hostname !== "graph.instagram.com") return json({ stories: [threeSides("big", 2, 3), threeSides("small", 1)] });
+    if (!u.hostname.startsWith("graph.")) return json({ stories: [threeSides("big", 2, 3), threeSides("small", 1)] });
     if (fail && u.pathname.endsWith(fail)) return json({ error: { message: "nope" } }, false);
     if (u.pathname === "/refresh_access_token") return json({ access_token: "fresh-token" });
     if (u.pathname === "/me") return json({ user_id: "17841" });
@@ -63,22 +63,31 @@ function fakeInstagram({ statuses = ["IN_PROGRESS", "FINISHED"], fail } = {}) {
   return { calls, fetchFn };
 }
 
+const rendered = [];
 const poster = (store, ig, extra = {}) => makeInstagramPoster({
-  store, fetchFn: ig.fetchFn, render: async (s) => Buffer.from(`jpeg of ${s.id}`), envToken: "env-token",
-  publicBase: "https://www.example.com", now: () => NOW, wait: async () => {}, log: { log() {}, error() {} }, ...extra,
+  store, fetchFn: ig.fetchFn, render: async (s) => { rendered.push(s.id); return { mp4: `/tmp/${s.id}.mp4`, cover: `/tmp/${s.id}-cover.jpg` }; },
+  envToken: "env-token", publicBase: "https://www.example.com", now: () => NOW, wait: async () => {}, log: { log() {}, error() {} }, ...extra,
 });
+// what the media route sends: a file path, or a 404
+const served = (p, file) => {
+  let out = 404;
+  p.media({ params: { file } }, { set() { return this; }, sendFile(f) { out = f; }, status() { return this; }, end() {} });
+  return out;
+};
 
-test("posts the day's card once: image served for Instagram, caption, publish, recorded", async () => {
+test("posts the day's Reel once: video and cover served for Instagram, caption, publish, recorded", async () => {
   const store = memoryStore(), ig = fakeInstagram(), p = poster(store, ig);
   const result = await p.run();
   assert.deepEqual(result, { posted: "Story big", mediaId: "media99" });
   const create = ig.calls.find(([, path]) => path === "/17841/media")[2];
-  assert.equal(create.image_url, "https://www.example.com/api/certior/instagram/2026-11-08.jpg");
+  assert.equal(create.media_type, "REELS");
+  assert.equal(create.video_url, "https://www.example.com/api/certior/instagram/2026-11-08.mp4");
+  assert.equal(create.cover_url, "https://www.example.com/api/certior/instagram/2026-11-08.jpg");
   assert.match(create.caption, /^Same story, three sides\. 6 outlets/);
   assert.equal(create.access_token, "env-token");
-  let served;
-  p.image({ params: { file: "2026-11-08.jpg" } }, { type() { return this; }, set() { return this; }, send(b) { served = String(b); }, status() { return this; }, end() {} });
-  assert.equal(served, "jpeg of big");
+  assert.equal(served(p, "2026-11-08.mp4"), "/tmp/big.mp4");
+  assert.equal(served(p, "2026-11-08.jpg"), "/tmp/big-cover.jpg");
+  assert.equal(served(p, "2026-11-07.mp4"), 404, "only the post being made");
   assert.equal(store.days.get("2026-11-08").mediaId, "media99");
   assert.deepEqual(await p.run(), { skipped: "already posted today" });
   assert.equal(ig.calls.filter(([, path]) => path === "/17841/media_publish").length, 1, "never twice a day");
@@ -88,7 +97,7 @@ test("a failed post is given back, so the next scheduled try can post", async ()
   const store = memoryStore(), p = poster(store, fakeInstagram({ fail: "/media_publish" }));
   await assert.rejects(p.run(), /Instagram \/17841\/media_publish: nope/);
   assert.equal(store.days.has("2026-11-08"), false);
-  await assert.rejects(poster(store, fakeInstagram({ statuses: ["ERROR"] })).run(), /didn't accept the image/);
+  await assert.rejects(poster(store, fakeInstagram({ statuses: ["ERROR"] })).run(), /didn't accept the video/);
   assert.deepEqual(await poster(store, fakeInstagram()).run(), { posted: "Story big", mediaId: "media99" });
 });
 
@@ -101,4 +110,51 @@ test("the token: seeded from the env, refreshed when a week old, and nothing hap
   assert.equal(old.saved.value, "fresh-token");
   assert.equal(ig2.calls.find(([, path]) => path === "/17841/media")[2].access_token, "fresh-token");
   assert.deepEqual(await poster(memoryStore(), fakeInstagram(), { envToken: "" }).run(), { skipped: "not set up: no IG_ACCESS_TOKEN" });
+});
+
+test("a system user's token (EAA...): graph.facebook.com, the account from IG_USER_ID, never stored or refreshed", async () => {
+  const store = memoryStore({ value: "bad old token", at: NOW - REFRESH_AFTER_MS - 1000 }), ig = fakeInstagram();
+  const sys = { envToken: "EAAsystem", igUserId: "17841" };
+  assert.deepEqual(await poster(store, ig, sys).run(), { posted: "Story big", mediaId: "media99" });
+  const graph = ig.calls.filter(([, path]) => path !== "feed");
+  assert.ok(graph.every(([, , , host]) => host === "graph.facebook.com"));
+  assert.ok(graph.every(([, , p]) => p.access_token === "EAAsystem"), "the env token wins over the stored one");
+  assert.equal(graph.some(([, path]) => path === "/me" || path === "/refresh_access_token"), false);
+  assert.deepEqual(await poster(memoryStore(), fakeInstagram(), { envToken: "EAAsystem" }).run(), { skipped: "not set up: no IG_USER_ID (needed with a system user's token)" });
+});
+
+test("posts the story picked on the stats page, but never one that breaks the rules", async () => {
+  const p = poster(memoryStore(), fakeInstagram());
+  assert.deepEqual(await p.run("small"), { posted: "Story small", mediaId: "media99" });
+  const store = memoryStore();
+  store.days.set("2026-11-05", { s: threeSides("small", 1), mediaId: "old" });      // its clips went out this week
+  assert.match((await poster(store, fakeInstagram()).run("small")).skipped, /shares a clip/);
+  assert.match((await poster(memoryStore(), fakeInstagram()).run("gone")).skipped, /isn't in the feed/);
+});
+
+test("the button starts the post in the background and the page can follow it", async () => {
+  let finish;
+  const p = poster(memoryStore(), fakeInstagram(), { wait: () => new Promise((r) => { finish = r; }) });
+  const job = p.start("big");
+  assert.equal(job.running, true);
+  assert.equal(p.start("small"), job, "one post at a time");
+  while (!finish) await new Promise((r) => setImmediate(r));
+  assert.equal(p.job().step, "Instagram is processing the video");
+  finish();
+  while (p.job().running) await new Promise((r) => setImmediate(r));
+  assert.deepEqual(p.job(), { posted: "Story big", mediaId: "media99" });
+  const failing = poster(memoryStore(), fakeInstagram({ fail: "/media" }));
+  failing.start();
+  while (failing.job().running) await new Promise((r) => setImmediate(r));
+  assert.match(failing.job().error, /Instagram \/17841\/media: nope/);
+});
+
+test("a story's Reel is made once: the preview and the post share it", async () => {
+  rendered.length = 0;
+  const p = poster(memoryStore(), fakeInstagram());
+  assert.deepEqual(await p.preview("big"), { mp4: "/tmp/big.mp4", cover: "/tmp/big-cover.jpg" });
+  await p.preview("big");
+  await p.run("big");
+  assert.deepEqual(rendered, ["big"]);
+  await assert.rejects(p.preview("gone"), /isn't in the feed/);
 });

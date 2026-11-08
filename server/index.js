@@ -97,34 +97,36 @@ app.get("/api/swipe-news/stats", statsGate, async (_req, res) => {
 });
 app.get("/certior-stats", statsGate, (_req, res) => res.sendFile(path.join(__dirname, "swipe-news-stats.html")));
 
-// The day's card, posted to Instagram by itself (token in IG_ACCESS_TOKEN; without it this does nothing). It tries at
-// 18:00 Dutch time and again on the next three hours if a try failed; it posts at most once a day.
+// The day's story as a Reel, posted to Instagram only when you press the button on /certior-stats (token in
+// IG_ACCESS_TOKEN; without it this does nothing). It posts at most once a day.
+// ponytail: no schedule, by choice; to go back to automatic, cron.schedule("0 18-21 * * *", () => instagram.run(), ...)
 const igStore = sqlStore(sql);
 const instagram = makeInstagramPoster({
   store: igStore,
-  render: async (...args) => (await import("./certiorCard.js")).renderCard(...args),      // loads the canvas only when posting
+  render: async (story, now) => (await import("./certiorReel.js")).renderReel(story, { now }),      // loads the canvas and ffmpeg only when needed
   envToken: process.env.IG_ACCESS_TOKEN,
+  igUserId: process.env.IG_USER_ID,
   publicBase: "https://www.benjamintakaki.com",
 });
-const postToInstagram = () => instagram.run()
-  .then((r) => r.skipped && console.log(`[certior] Instagram: ${r.skipped}`))
-  .catch((err) => console.error("[certior] Instagram post failed:", err.message || err));
-cron.schedule("0 18-21 * * *", postToInstagram, { timezone: "Europe/Amsterdam" });
-app.get("/api/certior/instagram/:file", instagram.image);
+app.get("/api/certior/instagram/:file", instagram.media);
 app.get("/api/certior/instagram-status", statsGate, async (_req, res) => {
   try {
-    res.json({ setUp: !!(process.env.IG_ACCESS_TOKEN || (await igStore.token())), recent: await igStore.recent(7) });
+    res.json({ setUp: !!(process.env.IG_ACCESS_TOKEN || (await igStore.token())), recent: await igStore.recent(7), job: instagram.job() });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
   }
 });
-app.post("/api/certior/instagram-run", statsGate, async (_req, res) => {
+// a story's Reel for the stats page to show and download (?cover: its cover); made once a day, shared with the post
+app.get("/api/certior/reel/:id", statsGate, async (req, res) => {
   try {
-    res.json(await instagram.run());
+    const { mp4, cover } = await instagram.preview(req.params.id);
+    res.set("Cache-Control", "no-store").sendFile("cover" in req.query ? cover : mp4);
   } catch (err) {
-    res.status(502).json({ error: String(err.message || err) });
+    res.status(err.status || 502).json({ error: String(err.message || err) });
   }
 });
+// starts the post and answers at once: it takes a few minutes, and the page follows it through instagram-status
+app.post("/api/certior/instagram-run", statsGate, express.json(), (req, res) => res.json(instagram.start(req.body?.story)));
 
 // A shared story's link previews that story (WhatsApp, iMessage, social media).
 const indexFile = path.join(DIST_DIR, "certior", "index.html");

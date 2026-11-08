@@ -47,6 +47,7 @@
   .post { display: grid; grid-template-columns: minmax(0, 300px) 1fr; gap: 16px; align-items: start; }
   @media (max-width: 640px) { .post { grid-template-columns: 1fr; } }
   .post img { width: 100%; border-radius: 10px; display: block; }
+  .post video { width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; display: block; background: #0b0c0f; }
   textarea { width: 100%; min-height: 190px; font: 14px/1.4 var(--font); color: var(--ink); background: var(--bg); border: 1px solid var(--hair); border-radius: 8px; padding: 10px; }
   select { max-width: 100%; }
   button, select, .btn { font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--hair); background: var(--bg); color: var(--ink); cursor: pointer; text-decoration: none; display: inline-block; }
@@ -91,7 +92,7 @@
 
 <section>
   <h2>Today's post</h2>
-  <p class="note">A story from the last day that all three sides covered, as a card to post, with a caption and a link that counts as <code>ref=social</code>.</p>
+  <p class="note">A story from the last day that all three sides covered, as a card to post, with a caption and a link that counts as <code>ref=social</code>. The Instagram Reel below is of the same story.</p>
   <div class="row"><select id="pick" aria-label="Story for today's post"></select></div>
   <div class="post" style="margin-top: 12px">
     <img id="card" alt="Today's share card">
@@ -108,8 +109,18 @@
 <section>
   <h2>Instagram</h2>
   <p class="note" id="ig-note">Checking…</p>
-  <table id="ig-recent"></table>
-  <div class="row"><button type="button" id="ig-run">Post Today's Now</button><span class="note" id="ig-result" style="margin:8px 0 0"></span></div>
+  <div class="post" style="margin-top: 12px">
+    <video id="reel" controls playsinline preload="metadata" aria-label="The Reel of the story picked above"></video>
+    <div>
+      <p class="note" id="reel-note"></p>
+      <div class="row">
+        <button type="button" id="ig-run">Post This Reel</button>
+        <a class="btn" id="reel-download" download>Download Reel</a>
+      </div>
+      <p class="note" id="ig-result" style="margin-top: 10px" role="status"></p>
+      <table id="ig-recent"></table>
+    </div>
+  </div>
 </section>
 
 <details>
@@ -239,7 +250,8 @@ const pick = $('#pick');
 pick.append(...picks.map((s, i) => { const o = el('option', `${s.headline} (${outlets(s)} outlets)`); o.value = i; return o; }));
 async function showPost() {
   const s = picks[+pick.value || 0];
-  if (!s) { $('#caption').value = 'No story from the last day was covered by all three sides yet.'; return; }
+  if (!s) { $('#caption').value = $('#reel-note').textContent = 'No story from the last day was covered by all three sides yet.'; return; }
+  showReel(s);
   const first = SIDES.map(([k, label]) => [label, s.clips.find((c) => c.column === k)]);
   const url = `${location.origin}/certior/?story=${encodeURIComponent(s.id)}&clip=${encodeURIComponent(first[1][1].id)}&ref=social`;
   const blob = await storyCard(s, first[1][1].id);
@@ -252,23 +264,46 @@ pick.onchange = showPost;
 $('#copy').onclick = async () => { await navigator.clipboard.writeText($('#caption').value); $('#copy').textContent = 'Copied'; };
 showPost();
 
-// ---- Instagram: posts by itself every day around 18:00; this shows what went out, and can post today's now
+// ---- Instagram: posts only when you press the button. The Reel of the story picked above, made by the server (the
+// same file the button posts), what went out, and the post being made, followed until it's done.
+function showReel(s) {
+  const src = `/api/certior/reel/${encodeURIComponent(s.id)}`;
+  $('#reel-note').textContent = 'Making the Reel\u2026 the first time takes a moment.';
+  Object.assign($('#reel'), { poster: `${src}?cover`, src });
+  Object.assign($('#reel-download'), { href: src, download: `certior-${today}.mp4` });
+}
+$('#reel').onloadeddata = () => { $('#reel-note').textContent = 'What the button posts, with the caption and hashtags.'; };
+$('#reel').onerror = async () => {
+  const r = await fetch($('#reel').src).catch(() => null);
+  if (r?.ok) { $('#reel-note').textContent = 'This browser can\u2019t play it here; Download Reel still works.'; return; }
+  const why = r && (await r.json().catch(() => ({}))).error;
+  $('#reel-note').textContent = `Couldn\u2019t make the Reel${why ? `: ${why}` : ''}.`;
+};
+const jobText = (j) => j.running ? `${j.step}\u2026` : j.posted ? `Posted: ${j.posted}` : j.skipped ? `Not posted: ${j.skipped}` : `Failed: ${j.error}`;
 async function showInstagram() {
-  const r = await fetch('/api/certior/instagram-status');
-  if (!r.ok) { $('#ig-note').textContent = 'Couldn\u2019t load the Instagram status.'; return; }
-  const { setUp, recent } = await r.json();
+  const r = await fetch('/api/certior/instagram-status').catch(() => null);
+  if (!r?.ok) { $('#ig-note').textContent = `Couldn\u2019t load the Instagram status${r ? ` (${r.status})` : ''}.`; return; }
+  const { setUp, recent, job } = await r.json();
   $('#ig-note').textContent = setUp
-    ? 'Posts the day\u2019s biggest story that all three sides covered, by itself, around 18:00 Dutch time. No story like that: no post that day.'
+    ? 'Nothing posts by itself. The button posts this Reel with its caption and hashtags: at most once a day, and only a story from the last day that all three sides covered.'
     : 'Not set up: add IG_ACCESS_TOKEN on Render to start posting.';
   const t = $('#ig-recent'); t.textContent = '';
-  for (const x of recent) { const tr = el('tr'); tr.append(el('td', x.day), el('td', x.headline), el('td', x.media_id ? 'Posted' : 'Trying')); t.append(tr); }
+  for (const x of recent) { const tr = el('tr'); tr.append(el('td', x.day), el('td', x.headline), el('td', x.media_id ? 'Posted' : x.stale ? 'Didn\u2019t finish' : 'Posting')); t.append(tr); }
   if (!recent.length && setUp) { const tr = el('tr'); tr.append(el('td', 'Nothing posted yet.')); t.append(tr); }
-  $('#ig-run').disabled = !setUp || recent.some((x) => x.day === today && x.media_id);
+  if (job) $('#ig-result').textContent = jobText(job);
+  $('#ig-run').disabled = !setUp || !picks.length || !!job?.running || recent.some((x) => x.day === today && x.media_id);
+  if (job?.running) setTimeout(showInstagram, 3000);
 }
 $('#ig-run').onclick = async () => {
-  $('#ig-run').disabled = true; $('#ig-result').textContent = 'Posting\u2026';
-  const r = await (await fetch('/api/certior/instagram-run', { method: 'POST' })).json();
-  $('#ig-result').textContent = r.posted ? `Posted: ${r.posted}` : r.skipped ? `Not posted: ${r.skipped}` : `Failed: ${r.error}`;
+  const s = picks[+pick.value || 0];
+  $('#ig-run').disabled = true; $('#ig-result').textContent = 'Starting\u2026';
+  try {
+    const r = await fetch('/api/certior/instagram-run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story: s.id }) });
+    if (!r.ok) throw new Error(`the server answered ${r.status}`);
+    $('#ig-result').textContent = jobText(await r.json());
+  } catch (err) {
+    $('#ig-result').textContent = `Failed: ${err.message}`;
+  }
   showInstagram();
 };
 showInstagram();
