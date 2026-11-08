@@ -49,6 +49,7 @@ export function sqlStore(sql) {
       await sql`CREATE TABLE IF NOT EXISTS certior_instagram (
         day date PRIMARY KEY, story_id text NOT NULL, headline text NOT NULL, clip_ids text[] NOT NULL,
         media_id text, at timestamptz NOT NULL DEFAULT now())`;
+      await sql`ALTER TABLE certior_instagram ADD COLUMN IF NOT EXISTS permalink text`;
     },
     async token() {
       const [row] = await sql`SELECT value, updated_at FROM certior_settings WHERE key = 'ig_token'`;
@@ -68,7 +69,7 @@ export function sqlStore(sql) {
         RETURNING day`;
       return rows.length === 1;
     },
-    async posted(day, mediaId) { await sql`UPDATE certior_instagram SET media_id = ${mediaId} WHERE day = ${day}`; },
+    async posted(day, mediaId, permalink = null) { await sql`UPDATE certior_instagram SET media_id = ${mediaId}, permalink = ${permalink} WHERE day = ${day}`; },
     async release(day) { await sql`DELETE FROM certior_instagram WHERE day = ${day} AND media_id IS NULL`; },
     async hasDay(day) {
       return (await sql`SELECT 1 FROM certior_instagram WHERE day = ${day} AND (media_id IS NOT NULL OR at > now() - interval '15 minutes')`).length > 0;
@@ -82,7 +83,7 @@ export function sqlStore(sql) {
       return new Set(rows.flatMap((r) => r.clip_ids));
     },
     async recent(n) {
-      return sql`SELECT to_char(day, 'YYYY-MM-DD') AS day, headline, media_id,
+      return sql`SELECT to_char(day, 'YYYY-MM-DD') AS day, headline, media_id, permalink,
         (media_id IS NULL AND at < now() - interval '15 minutes') AS stale FROM certior_instagram ORDER BY day DESC LIMIT ${n}`;
     },
   };
@@ -195,7 +196,9 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
       }
       step("Publishing");
       const { id: mediaId } = await call("POST", `/${user_id}/media_publish`, { creation_id: container, access_token });
-      await store.posted(day, mediaId);
+      // the post's address, for the stats page to link to; a post without one is still a post
+      const permalink = await call("GET", `/${mediaId}`, { fields: "permalink", access_token }).then((r) => r.permalink || null, () => null);
+      await store.posted(day, mediaId, permalink);
       log.log(`[certior] posted to Instagram: ${story.headline}`);
       return { posted: story.headline, mediaId };
     } catch (err) {

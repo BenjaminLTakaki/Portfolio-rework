@@ -37,7 +37,7 @@ function memoryStore(token) {
     async token() { return this.saved; },
     async saveToken(value) { this.saved = { value, at: NOW }; },
     async claim(day, s) { if (days.has(day)) return false; days.set(day, { s, mediaId: null }); return true; },
-    async posted(day, mediaId) { days.get(day).mediaId = mediaId; },
+    async posted(day, mediaId, permalink) { Object.assign(days.get(day), { mediaId, permalink }); },
     async release(day) { if (days.get(day)?.mediaId == null) days.delete(day); },
     async hasDay(day) { return days.has(day); },
     async recentClipIds() { return new Set([...days.values()].flatMap((d) => d.s.clips.map((c) => c.id))); },
@@ -58,6 +58,7 @@ function fakeInstagram({ statuses = ["IN_PROGRESS", "FINISHED"], fail } = {}) {
     if (u.pathname === "/17841/media") return json({ id: "container1" });
     if (u.pathname === "/container1") return json({ status_code: statuses.shift() });
     if (u.pathname === "/17841/media_publish") return json({ id: "media99" });
+    if (u.pathname === "/media99") return json({ permalink: "https://www.instagram.com/reel/abc/" });
     throw new Error(`unexpected ${u.pathname}`);
   };
   return { calls, fetchFn };
@@ -89,6 +90,7 @@ test("posts the day's Reel once: video and cover served for Instagram, caption, 
   assert.equal(served(p, "2026-11-08.jpg"), "/tmp/big-cover.jpg");
   assert.equal(served(p, "2026-11-07.mp4"), 404, "only the post being made");
   assert.equal(store.days.get("2026-11-08").mediaId, "media99");
+  assert.equal(store.days.get("2026-11-08").permalink, "https://www.instagram.com/reel/abc/", "kept, so the stats page can link the post");
   assert.deepEqual(await p.run(), { skipped: "already posted today" });
   assert.equal(ig.calls.filter(([, path]) => path === "/17841/media_publish").length, 1, "never twice a day");
 });

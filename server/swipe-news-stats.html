@@ -131,7 +131,7 @@
   .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
   .duo div { background: var(--inset); border-radius: 10px; padding: 10px 12px; }
   .duo b { display: block; font-size: 24px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; }
-  .duo span { display: block; font-size: 13px; color: var(--muted); }
+  .duo > div > span { display: block; font-size: 13px; color: var(--muted); }      /* the box's own lines; a note's arrow stays inline */
 
   /* every number */
   details.card { margin-top: 12px; padding: 0; }
@@ -158,7 +158,9 @@
   /* posting */
   .post-card { display: grid; gap: 24px; align-items: start; }
   .ig-card { grid-template-columns: 211px minmax(0, 1fr) minmax(320px, 440px); }
-  .share-card { grid-template-columns: 211px minmax(0, 1fr); margin-top: 12px; }
+  .share-card { grid-template-columns: 211px minmax(0, 76ch) minmax(200px, 1fr); margin-top: 12px; }
+  .share-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+  .share-actions .note, .share-actions .why { margin: 0; }
   .ig-card.quiet { grid-template-columns: minmax(0, 1fr) minmax(320px, 440px); }
   select { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--hair); border-radius: 9px; padding: 8px 12px; min-height: 38px; max-width: 560px; width: 100%; }
   .pick-wrap { display: flex; align-items: center; gap: 10px; flex: 1 1 420px; justify-content: flex-end; }
@@ -184,6 +186,7 @@
   #ig-recent td:nth-child(2), #ig-recent th:nth-child(2) { white-space: normal; text-align: left; }
   #ig-recent td:first-child, #ig-recent th:first-child { text-align: left; }
   #ig-recent { margin-top: 8px; }
+  #ig-recent a { color: var(--ink); text-decoration-color: var(--muted); text-underline-offset: 2px; }
   .errbox { border-color: var(--down); }
   .errbox p { margin: 6px 0 12px; }
 
@@ -195,6 +198,8 @@
     .ig-card { grid-template-columns: 211px minmax(0, 1fr); }
     .ig-card .recent { grid-column: 1 / -1; }
     .ig-card.quiet { grid-template-columns: 1fr; }
+    .share-card { grid-template-columns: 211px minmax(0, 1fr); }
+    .share-actions { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; align-items: center; }
   }
   @media (max-width: 720px) {
     .page { padding: 20px 16px 48px; }
@@ -290,7 +295,6 @@
       <section class="card post-card ig-card" id="ig-card" aria-labelledby="ig-title" style="margin-top: 12px">
         <figure class="media" id="reel-fig">
           <video id="reel" controls playsinline preload="metadata" aria-label="The Reel of the story picked above"></video>
-          <figcaption><a class="btn" id="reel-download" download>Download Reel</a></figcaption>
         </figure>
         <div>
           <h3 id="ig-title">Post to Instagram</h3>
@@ -299,7 +303,7 @@
           <div id="ig-post">
             <span class="label" style="margin-top: 16px">Caption on Instagram <span>· written by the server, exactly what goes out</span></span>
             <blockquote class="ig-quote" id="ig-caption">…</blockquote>
-            <div class="row"><button type="button" class="primary" id="ig-run" aria-disabled="true" aria-describedby="ig-why">Post this Reel</button><span class="why" id="ig-why" role="status">Loading…</span></div>
+            <div class="row"><button type="button" class="primary" id="ig-run" aria-disabled="true" aria-describedby="ig-why">Post this Reel</button><a class="btn" id="reel-download" download>Download Reel</a><span class="why" id="ig-why" role="status">Loading…</span></div>
             <p class="status" id="ig-result" role="status"></p>
           </div>
         </div>
@@ -310,16 +314,19 @@
       </section>
 
       <section class="card post-card share-card" id="share-card" aria-labelledby="share-title">
-        <figure class="media">
-          <img id="card" alt="The story as a card">
-          <figcaption><a class="btn" id="download">Download image</a></figcaption>
-        </figure>
+        <figure class="media"><img id="card" alt="The story as a card"></figure>
         <div>
           <h3 id="share-title">Share elsewhere</h3>
           <p class="note">For any other feed: the card, and a caption you can edit.</p>
-          <label class="label" for="caption" style="margin-top: 16px">Caption <span>· its link counts as “Your caption link”</span></label>
+          <label class="label" for="caption" style="margin-top: 16px">Caption</label>
           <textarea id="caption"></textarea>
-          <div class="row"><button type="button" id="copy">Copy caption</button><span class="why" id="copy-status" role="status"></span></div>
+        </div>
+        <div class="share-actions">
+          <h4 style="margin: 0">Share</h4>
+          <button type="button" id="copy">Copy caption</button>
+          <a class="btn" id="download">Download image</a>
+          <p class="why" id="copy-status" role="status"></p>
+          <p class="note">The caption’s link counts as “Your caption link” under Where visits came from.</p>
         </div>
       </section>
     </section>
@@ -423,9 +430,9 @@ const KPIS = [
   { label: 'Visits a day', kind: 'avg', names: ['visit'], value: (r) => (r ? sum('visit', r) / days(r) : null), show: fmt, desc: (r) => `${many(sum('visit', r), 'visit')} in ${many(days(r), 'day')}` },
   { label: 'New devices', kind: 'count', names: ['visit'], value: (r) => (r ? sum('new', r) : null), show: fmt, desc: () => 'first time on Certior' },
   { label: 'Came back the next day', kind: 'ratio', names: ['visit'], value: nextDay, show: pct, desc: () => 'of new devices' },
-  { label: 'Watched 2+ sides', kind: 'ratio', names: ['story_watched'], value: (r) => (r ? ratio(sum('story_sides', r), sum('story_watched', r)) : null), show: pct, desc: () => 'of stories with 2+ sides' },
+  { label: 'Watched 2+ sides', kind: 'ratio', names: ['story_compared'], value: (r) => (r ? ratio(sum('story_compared', r), sum('story_watched', r)) : null), show: pct, desc: () => 'of the 2+\u00a0side stories watched' },
   { label: 'Clips per visit', kind: 'avg', names: ['visit'], value: (r) => (r ? ratio(clips(r), sum('mode_videos', r)) : null), show: (x) => x.toFixed(1), desc: () => 'on visits with videos on' },
-  { label: 'Shares', kind: 'count', names: ['visit'], value: (r) => (r ? sum('share', r) : null), show: fmt, desc: (r) => `${many(sum('shared_open', r), 'link open')} · ${fmt(sum('ref:share', r))}\u00a0started\u00a0a\u00a0visit` },
+  { label: 'Shares', kind: 'count', names: ['visit'], value: (r) => (r ? sum('share', r) : null), show: fmt, desc: (r) => `${many(sum('shared_open', r), 'link open')}, ${fmt(sum('ref:share', r))}\u00a0started\u00a0a\u00a0visit` },
 ];
 // what changed, in words a glance can take: small moves read "about the same", small counts as a plain difference
 function change(k, a, b, start) {
@@ -631,6 +638,8 @@ function ages() {
     lead.append(wasLine(back(prev)));
     line.style.margin = '2px 0 0';
     line.append(countNote(n(prev), n(cur)));
+    const fresh = [sum('age_0', prev), sum('age_0', cur)], move = fresh[0] ? (fresh[1] - fresh[0]) / fresh[0] : 0;
+    if (Math.abs(move) >= 0.05) line.append(`, while new visits ${move > 0 ? 'rose' : 'fell'} ${Math.round(Math.abs(move) * 100)}%`);
     box.append(line);
   }
   const items = [['First day', 'age_0'], [`Second day (${pct(nextDay(cur))} of new devices)`, 'age_1'], ['Days 3 to 8', 'age_2_7'], ['Days 9 to 31', 'age_8_30'], ['After a month', 'age_31_plus']].map(([l, k]) => [l, sum(k, cur)]);
@@ -678,14 +687,17 @@ function sides(feed) {
     keys.forEach(([, k], i) => { if (n[i]) { const seg = el('i'); seg.style.cssText = `flex: ${n[i]} 1 0; background: var(--${k})`; bar.append(seg); } });
     avail.append(el('span', 'For comparison, the sides of the clips in today’s feed:'), bar);
     // how each side was watched against its share of the feed, in words; only the ones well off it
-    const words = (r) => (r >= 1.75 ? 'about twice' : r >= 1.3 ? 'about one and a half times' : r >= 0.8 ? '' : r >= 0.6 ? 'about two-thirds of' : r >= 0.4 ? 'about half' : 'well under half');
+    const words = (r) => (r >= 1.75 ? 'about twice' : r >= 1.3 ? 'about one and a half times' : r >= 0.8 ? '' : r >= 0.6 ? 'about two-thirds' : r >= 0.4 ? 'about half' : 'well under half');
+    const name = (label) => label.replace('-', '\u2011');
     const off = keys.map(([label], i) => [label, q[i] >= 3 ? p[i] / q[i] : 1]).filter(([, r]) => words(r)).sort((a, b) => b[1] - a[1]);
     const line = el('p'); line.style.margin = '8px 0 0';
     if (!off.length) line.textContent = 'What people watched follows today’s feed closely.';
     else {
       const parts = [off[0], ...(off.length > 1 ? [off.at(-1)] : [])].filter((x, i, all) => all.indexOf(x) === i);
-      parts.forEach(([label, r], i) => { line.append(i ? '; ' : '', el('b', label), ` watched ${words(r)} its share`); });
-      line.append(' of today’s feed.');
+      const [[l0, r0], second] = parts;
+      line.append(el('b', name(l0)), ` clips were watched ${words(r0)} as often as their share of today’s feed`);
+      if (second) line.append('; ', el('b', name(second[0])), ` ${words(second[1])} as often`);
+      line.append('.');
     }
     avail.append(line);
   });
@@ -704,9 +716,11 @@ function use() {
   if (!visits) return emptyNote(box, 'No visits in the last 7 days.');
   const duo = el('div', null, 'duo'), home = (r) => ratio(sum('homescreen', r), sum('visit', r));
   const vids = (r) => ratio(sum('mode_videos', r), sum('mode_videos', r) + sum('mode_text', r));
-  for (const [f, label] of [[home, 'via Home Screen'], [vids, 'with videos on']]) {
-    const d = el('div'); d.append(el('b', pct(f(cur))), el('span', label));
-    if (compare() && f(prev) != null) d.append(el('span', `was ${pct(f(prev))}`, 'was'));
+  for (const [f, label, k] of [[home, 'via Home Screen', 'homescreen'], [vids, 'with videos on', 'mode_videos']]) {
+    const d = el('div'), count = el('span', many(sum(k, cur), 'visit'), 'was');
+    d.append(el('b', pct(f(cur))), el('span', label));
+    if (compare() && f(prev) != null) { d.append(el('span', `was ${pct(f(prev))}`, 'was')); count.append(countNote(sum(k, prev), sum(k, cur))); }
+    d.append(count);
     duo.append(d);
   }
   box.append(duo, el('h4', 'Times used'));
@@ -723,7 +737,7 @@ const GROUPS = [
   ['Since first visit', [['age_0', 'First day'], ['age_1', 'Second day'], ['age_2_7', 'Days 3–8'], ['age_8_30', 'Days 9–31'], ['age_31_plus', 'After a month']]],
   ['Opened from', [['homescreen', 'Home Screen'], ['browser', 'Browser']]],
   ['Mode', [['mode_videos', 'Videos on'], ['mode_text', 'Text Only']]],
-  ['Stories', [['story', 'Opened'], ['story_watched', 'Watched'], ['story_sides', '2+ sides']]],
+  ['Stories', [['story', 'Opened'], ['story_watched', 'Watched (2+ sides)'], ['story_compared', 'Compared']]],
   ['Clips by side', [['watched_left', 'Left'], ['watched_center', 'Center'], ['watched_right', 'Right'], ['watched_state', 'State-funded'], ['watched_unrated', 'Not rated']]],
   ['Features', [['compare', 'Compare'], ['recap', 'Recap'], ['search', 'Search'], ['world', 'World map']]],
   ['Sharing', [['share', 'Shares'], ['shared_open', 'Opens']]],
@@ -792,12 +806,12 @@ const wanted = picks.findIndex((s) => s.id === new URLSearchParams(location.sear
 if (wanted > 0) pick.value = wanted;
 const chosen = () => picks[+pick.value || 0];
 // Post waits until the Reel, its caption and Instagram's status are all in
-const ready = { reel: false, reelError: '', caption: false, status: null };
+const ready = { reel: false, reelError: '', caption: false, captionError: '', status: null };
 function updateButton() {
   const st = ready.status, doneToday = st?.recent?.some((x) => x.day === today && x.media_id);
   const why = !picks.length ? 'No story qualifies yet.' : !st ? 'Checking Instagram…' : !st.recent ? 'Instagram’s status didn’t load: try Refresh.'
     : !st.setUp ? 'Instagram isn’t set up.' : doneToday ? 'Already posted today.' : st.job?.running ? ''
-    : !ready.reel ? ready.reelError || 'Waiting for the Reel…' : !ready.caption ? 'Waiting for the caption…' : '';
+    : !ready.reel ? ready.reelError || 'Waiting for the Reel…' : !ready.caption ? ready.captionError || 'Waiting for the caption…' : '';
   $('#ig-run').setAttribute('aria-disabled', String(!!why || !!st?.job?.running));      // still focusable, so its reason can be heard
   $('#ig-why').textContent = why;
 }
@@ -811,7 +825,7 @@ async function showPost() {
   const s = chosen();
   if (!s) return;
   history.replaceState(null, '', `?story=${encodeURIComponent(s.id)}${location.hash}`);
-  ready.reel = ready.caption = false; ready.reelError = ''; updateButton();
+  ready.reel = ready.caption = false; ready.reelError = ready.captionError = ''; updateButton();
   showReel(s); showCaption(s);
   const first = SIDES.map(([k, label]) => [label, s.clips.find((c) => c.column === k)]);
   const url = `${location.origin}/certior/?story=${encodeURIComponent(s.id)}&clip=${encodeURIComponent(first[1][1].id)}&ref=social`;
@@ -844,7 +858,9 @@ async function showCaption(s) {
   }
   if (s !== chosen()) return;
   $('#ig-caption').textContent = j?.caption || `Couldn’t load the caption${j?.error ? `: ${j.error}` : ''}.`;
-  ready.caption = !!j?.caption; updateButton();
+  ready.caption = !!j?.caption;
+  ready.captionError = j?.caption ? '' : 'The caption didn’t load: try Refresh.';
+  updateButton();
 }
 // the Reel, made once by the server (a minute or so on Render); the page asks until it's ready, then shows the file
 async function showReel(s) {
@@ -894,7 +910,14 @@ async function showInstagram(pending) {
     const tr = el('tr'); tr.append(el('th', 'Day'), el('th', 'Story'), el('th', 'Visits'), el('th', 'From IG'), el('th', 'Status')); t.append(tr);
     for (const x of recent) {
       const r = el('tr'), v = byDay[x.day]?.visit, ig = bySite([x.day, x.day]).Instagram || 0, sofar = x.day === today ? ' so far' : '';
-      r.append(el('td', short(x.day)), el('td', x.headline), el('td', v == null ? '—' : `${fmt(v)}${sofar}`), el('td', v == null ? '—' : fmt(ig)),
+      const story = el('td');
+      if (x.permalink) {
+        const a = Object.assign(el('a', x.headline), { href: x.permalink, target: '_blank', rel: 'noopener' }), mark = el('span', ' ↗');
+        mark.setAttribute('aria-hidden', 'true');
+        a.append(mark, el('span', ' (opens Instagram)', 'sr'));
+        story.append(a);
+      } else story.textContent = x.headline;
+      r.append(el('td', short(x.day)), story, el('td', v == null ? '—' : `${fmt(v)}${sofar}`), el('td', v == null ? '—' : fmt(ig)),
         el('td', x.media_id ? 'Posted' : x.stale ? 'Didn’t finish' : 'Posting'));
       t.append(r);
     }
