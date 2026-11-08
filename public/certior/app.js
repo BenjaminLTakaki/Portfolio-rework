@@ -233,6 +233,7 @@ function renderBar() {
   action.innerHTML = place ? SHUFFLE_ICON : REFRESH_ICON;
   action.setAttribute('aria-label', place ? 'Take me somewhere else' : 'Check for new stories');
   action.onclick = place ? takeMeSomewhere : refreshFeed;
+  if (isPushed) $('#bar-end').prepend(action); else $('#bar-start').append(action);
 }
 
 $('#topic').append(...Object.entries(TOPICS).map(([key, label]) => { const o = el('option', '', label); o.value = key; return o; }));
@@ -669,7 +670,7 @@ function renderStory(s, si) {
       yt.href = `https://www.youtube.com/watch?v=${c.id}`; yt.target = '_blank'; yt.rel = 'noopener';
       const compare = el('button', 'compare-btn');
       compare.type = 'button';
-      compare.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h11M4 12h16M4 17h8"/></svg>Compare';
+      compare.textContent = 'Compare';
       compare.onclick = () => openCompare(si, c.id);
       const meta = el('div', 'meta'), row = el('div', 'row');
       if (videosOn()) {
@@ -706,21 +707,21 @@ function renderStory(s, si) {
 // Text Only: the clip's own headline, word for word with its outlet, then the first headline from each other side.
 // Nothing here loads from YouTube.
 function textCard(s, c, si) {
-  const card = el('div', 'textcard'), sport = s.topic === 'sports';
-  const side = el('p', 'tc-side' + (sport ? '' : ' dot'), sport ? 'Sports' : COLUMNS[c.column]);
-  side.dataset.column = c.column;
+  const card = el('div', 'textcard'), body = el('div', 'tc-body'), sport = s.topic === 'sports';
   const by = el('p', 'tc-by');
   by.append(el('b', '', c.channel), ` · ${byline(c, s, true)}`);
-  card.append(side, el('h2', 'tc-head', c.title), by);
-  if (c.note && settings.notes) card.append(el('p', 'tc-note', c.note));
+  body.append(el('h2', 'tc-head', c.title), by);
+  if (c.note && settings.notes) body.append(el('p', 'tc-note', c.note));
   const others = sport ? s.clips.filter((k) => k.channel !== c.channel).slice(0, 2).map((k) => [null, k])
-    : Object.entries(sideHeads(s)).filter(([col]) => col !== c.column);
+    : [...Object.entries(sideHeads(s)), ...[s.clips.find((k) => k.column === 'state')].filter(Boolean).map((k) => ['state', k])]
+      .filter(([col]) => col !== c.column);
   if (others.length) {
     const box = el('div', 'tc-others');
     box.append(el('p', 'tc-label', sport ? 'Also covering it' : 'How the other sides put it'));
     for (const [col, k] of others) {
       const b = el('button', 'tc-other');
       b.type = 'button';
+      if (col) b.dataset.column = col;
       const who = el('span', 'tc-other-by' + (col ? ' dot' : ''), col ? `${COLUMNS[col]} ·` : '');
       if (col) who.dataset.column = col;
       who.append(el('b', '', k.channel));
@@ -728,15 +729,9 @@ function textCard(s, c, si) {
       b.onclick = () => { const sc = clipsEl(si); sc.scrollTo({ left: s.clips.indexOf(k) * sc.clientWidth, behavior: SMOOTH }); };
       box.append(b);
     }
-    card.append(box);
+    body.append(box);
   }
-  const videos = el('div', 'tc-videos');
-  const on = el('button', '', 'Turn On Videos');
-  on.type = 'button';
-  on.onclick = () => { chooseVideos(true); onScrollStart(); draw({ story: s.id, clip: c.id }); };    // same stories, now with video
-  videos.append(el('span', '', 'Videos are off'), on);
-  if (!others.length) videos.style.marginTop = 'auto';
-  card.append(videos);
+  card.append(body);
   return card;
 }
 
