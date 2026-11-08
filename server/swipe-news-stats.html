@@ -266,19 +266,23 @@ showPost();
 
 // ---- Instagram: posts only when you press the button. The Reel of the story picked above, made by the server (the
 // same file the button posts), what went out, and the post being made, followed until it's done.
-function showReel(s) {
-  const src = `/api/certior/reel/${encodeURIComponent(s.id)}`;
-  $('#reel-note').textContent = 'Making the Reel\u2026 the first time takes a moment.';
-  Object.assign($('#reel'), { poster: `${src}?cover`, src });
+// The server makes the Reel once (a minute or so on Render); the page asks until it's ready, then shows the file.
+async function showReel(s) {
+  const src = `/api/certior/reel/${encodeURIComponent(s.id)}`, video = $('#reel');
+  video.removeAttribute('src'); video.removeAttribute('poster'); video.load();
+  $('#reel-download').removeAttribute('href');
+  $('#reel-note').textContent = 'Making the Reel\u2026 the first time can take a minute.';
+  for (;;) {
+    const r = await fetch(`${src}?ready`).catch(() => null), j = r && await r.json().catch(() => null);
+    if (s !== picks[+pick.value || 0]) return;      // another story was picked meanwhile
+    if (j?.ready) break;
+    if (!j || j.error) { $('#reel-note').textContent = `Couldn\u2019t make the Reel: ${j?.error || (r ? `the server answered ${r.status}` : 'no answer from the server')}.`; return; }
+  }
+  Object.assign(video, { poster: `${src}?cover`, src });
   Object.assign($('#reel-download'), { href: src, download: `certior-${today}.mp4` });
+  $('#reel-note').textContent = 'What the button posts, with the caption and hashtags.';
 }
-$('#reel').onloadeddata = () => { $('#reel-note').textContent = 'What the button posts, with the caption and hashtags.'; };
-$('#reel').onerror = async () => {
-  const r = await fetch($('#reel').src).catch(() => null);
-  if (r?.ok) { $('#reel-note').textContent = 'This browser can\u2019t play it here; Download Reel still works.'; return; }
-  const why = r && (await r.json().catch(() => ({}))).error;
-  $('#reel-note').textContent = `Couldn\u2019t make the Reel${why ? `: ${why}` : ''}.`;
-};
+$('#reel').onerror = () => { if ($('#reel').getAttribute('src')) $('#reel-note').textContent = 'This browser can\u2019t play it here; Download Reel still works.'; };
 const jobText = (j) => j.running ? `${j.step}\u2026` : j.posted ? `Posted: ${j.posted}` : j.skipped ? `Not posted: ${j.skipped}` : `Failed: ${j.error}`;
 async function showInstagram() {
   const r = await fetch('/api/certior/instagram-status').catch(() => null);

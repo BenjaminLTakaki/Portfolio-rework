@@ -128,11 +128,17 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
   }
 
   // A story's Reel, made once a day: the stats page's preview and the post share it. A failed one can be tried again.
+  // One is made at a time: making one takes much of a small server's memory.
   // ponytail: the files stay in the temp folder until the server restarts (every deploy); prune them if that ever matters
+  let making = Promise.resolve();
   function reel(story) {
     const key = `${today()}:${story.id}`;
     for (const k of reels.keys()) if (!k.startsWith(today())) reels.delete(k);
-    if (!reels.has(key)) reels.set(key, render(story, new Date(now())).catch((err) => { reels.delete(key); throw err; }));
+    if (!reels.has(key)) {
+      const made = making.then(() => render(story, new Date(now())));
+      making = made.catch(() => {});
+      reels.set(key, made.catch((err) => { reels.delete(key); throw err; }));
+    }
     return reels.get(key);
   }
 

@@ -4,9 +4,11 @@
 //   0.65 s  the hook moves up out of the way and Left, Center and Right slide in, their headlines blurred (you can see
 //           who's coming, "RIGHT · Fox News", not what they said); each is revealed in turn for as long as it takes
 //           to read, while its part of the bar fills and the ones already read dim
-//   then    all three together to compare, a question for the comments, and the end card.
+//   then    all three together to compare, a question for the comments, and the end card (the logo's arcs drawn in,
+//           "Link in bio"), as in the tutorials.
 // Headlines word for word with their outlets, as on the card; no logos, no thumbnails, no footage. Drawn on the same
 // Skia canvas and Inter as the card, encoded by ffmpeg (ffmpeg-static: Render has none), sound from certiorReelAudio.js.
+// Made to fit a small server: one ffmpeg with one thread and a frame or two in flight.
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -21,10 +23,9 @@ import { soundtrack } from "./certiorReelAudio.js";
 const here = path.dirname(fileURLToPath(import.meta.url));
 GlobalFonts.registerFromPath(path.join(here, "fonts", "InterVariable.ttf"), "Inter");
 const ICON = path.join(here, "..", "public", "certior", "icons", "icon-192.png");
-const END_CARD = path.join(here, "certior-endcard.mp4");      // the tutorials' end card: the logo, "Link in bio"
 
 const W = 1080, H = 1920, FPS = 30, X = 80, CW = W - 2 * X;
-const C = { bg: "#0b0c0f", ink: "#f6f7f9", muted: "#a9aeb7", panel: "rgba(23,25,30,.92)" };
+const C = { bg: "#0b0c0f", ink: "#f6f7f9", muted: "#a9aeb7", tint: "#4a90ff", panel: "rgba(23,25,30,.92)" };
 const SIDES = [["left", "LEFT", "#4a90ff"], ["center", "CENTER", "#b9bdc6"], ["right", "RIGHT", "#ef5a52"]];
 const HOOK = ["Same story.", "3 headlines."], ASK = ["Which headline", "would you click?"];
 const BIG = 124, BIG_LH = 130, S1 = 0.6;      // the hook's size, and its scale once it has moved up
@@ -32,7 +33,9 @@ const Y0 = 700, Y1 = 330;                      // the hook's top: centred, then 
 const PANELS_TOP = Y1 + 2 * BIG_LH * S1 + 22 + 12 + 32, PANELS_END = 1490;      // above Instagram's caption
 const PAD = 34, PILL = 42, GAP = 20;
 const SIZES = [[58, 68], [55, 65], [52, 62], [48, 58], [44, 53], [40, 48]];      // the headlines' [size, line height]: smaller, never cut
-const MOVE = 0.65, MOVE_D = 0.35, FIRST = 0.85, END_LEN = 1.9;      // the end card is complete by 1.1 s
+const MOVE = 0.65, MOVE_D = 0.35, FIRST = 0.85, END_LEN = 1.9;      // the end card is complete by 1.2 s
+// the logo (certior-mark.svg): three arcs of one circle, Left's blue on top, Center's grey left, Right's red below
+const MARK = [[-42.3, -126.3, "#4a90ff"], [-135.6, -224.4, "#b9bdc6"], [126.3, 42.3, "#ef5a52"]].map(([a, b, c]) => [a * Math.PI / 180, b * Math.PI / 180, c]);
 const readTime = (text) => Math.min(2.6, Math.max(1.7, 0.5 + 0.15 * text.split(/\s+/).length));
 
 const ease = (p) => 1 - (1 - Math.min(Math.max(p, 0), 1)) ** 3;
@@ -82,14 +85,17 @@ export async function renderReel(story, { now = new Date(), out = path.join(os.t
     return c;
   });
 
-  // the still parts, drawn once: the card's background (Left's blue and Right's red glowing in from opposite corners), the header
-  const bg = createCanvas(W, H), b = bg.getContext("2d");
-  b.fillStyle = C.bg; b.fillRect(0, 0, W, H);
+  // the still parts, drawn once: the card's background (Left's blue and Right's red glowing in from opposite corners),
+  // and the same with the header
+  const plain = createCanvas(W, H), p = plain.getContext("2d");
+  p.fillStyle = C.bg; p.fillRect(0, 0, W, H);
   for (const [x, y, color] of [[0, 120, "rgba(74,144,255,.24)"], [W, H - 160, "rgba(239,90,82,.2)"]]) {
-    const g = b.createRadialGradient(x, y, 0, x, y, 950);
+    const g = p.createRadialGradient(x, y, 0, x, y, 950);
     g.addColorStop(0, color); g.addColorStop(1, "rgba(0,0,0,0)");
-    b.fillStyle = g; b.fillRect(0, 0, W, H);
+    p.fillStyle = g; p.fillRect(0, 0, W, H);
   }
+  const bg = createCanvas(W, H), b = bg.getContext("2d");
+  b.drawImage(plain, 0, 0);
   const icon = await loadImage(ICON);
   b.save(); b.beginPath(); b.roundRect(X, 236, 52, 52, 13); b.clip(); b.drawImage(icon, X, 236, 52, 52); b.restore();
   b.textBaseline = "middle";
@@ -148,6 +154,27 @@ export async function renderReel(story, { now = new Date(), out = path.join(os.t
     });
   }
 
+  // the end card at u s: the logo's arcs drawn in (with the chimes), then the name, "Link in bio" and the small print
+  function drawEnd(u) {
+    ctx.globalAlpha = 1;
+    ctx.drawImage(plain, 0, 0);
+    ctx.lineWidth = 52;
+    MARK.forEach(([a, b, color], i) => {
+      const k = prog(u, 0.05 + i * 0.15, 0.3);
+      if (k <= 0) return;
+      ctx.strokeStyle = color; ctx.beginPath(); ctx.arc(W / 2, 740, 114, a, a + (b - a) * k, true); ctx.stroke();
+    });
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const name = prog(u, 0.45, 0.3), link = prog(u, 0.75, 0.25), small = prog(u, 0.95, 0.25);
+    ctx.globalAlpha = name; ctx.fillStyle = C.ink; font(700, 104); ctx.fillText("certior", W / 2, 985 + 20 * (1 - name));
+    ctx.globalAlpha = link; font(700, 40);
+    const lw = ctx.measureText("Link in bio").width + 88;
+    ctx.fillStyle = C.tint; ctx.beginPath(); ctx.roundRect((W - lw) / 2, 1100, lw, 92, 46); ctx.fill();
+    ctx.fillStyle = C.ink; ctx.fillText("Link in bio", W / 2, 1147);
+    ctx.globalAlpha = small; ctx.fillStyle = C.muted; font(500, 32); ctx.fillText("Free. No account. No ads.", W / 2, 1250);
+    ctx.textAlign = "left";
+  }
+
   // --- the cover (all three sides, under the hook), the sound, then every frame through ffmpeg
   const cover = out.replace(/\.mp4$/i, "") + "-cover.jpg";
   draw(CMP + 0.45);
@@ -156,17 +183,15 @@ export async function renderReel(story, { now = new Date(), out = path.join(os.t
   await fs.writeFile(wav, soundtrack([{ t: MOVE, type: "swipe" }, ...E.map((t, i) => ({ t, type: "arc", i })), { t: ASK_AT, type: "tap" },
     { t: END + 0.2, type: "end" }, ...[0, 1, 2].map((i) => ({ t: END + 0.35 + i * 0.15, type: "arc", i }))], DUR, END));      // in time with the end card's arcs
 
-  // ffmpeg fades the last frame into the end card (held on its first frame for the fade, then played); standard HD colour
-  const norm = `fps=${FPS},settb=AVTB,setsar=1,scale=out_color_matrix=bt709:out_range=tv,format=yuv420p`;
-  const enc = spawn(ffmpeg, ["-v", "error", "-y",
-    "-f", "rawvideo", "-pix_fmt", "rgba", "-s", `${W}x${H}`, "-r", String(FPS), "-i", "-",
-    "-i", END_CARD, "-i", wav,
-    "-filter_complex", `[0:v]${norm}[a];[1:v]tpad=start_duration=0.3:start_mode=clone,trim=duration=${(0.3 + END_LEN).toFixed(2)},setpts=PTS-STARTPTS,${norm}[b];` +
-      `[a][b]xfade=transition=fade:duration=0.3:offset=${END.toFixed(3)},format=yuv420p[v]`,
-    "-map", "[v]", "-map", "2:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-color_range", "tv", "-colorspace", "bt709",
-    "-color_primaries", "bt709", "-color_trc", "bt709", "-preset", "veryfast", "-tune", "animation", "-crf", "18", "-threads", "2",
-    "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-t", DUR.toFixed(3), "-movflags", "+faststart", out], { stdio: ["pipe", "ignore", "pipe"] });
+  // One thread and a short queue: ffmpeg otherwise starts a thread, with its frames, per CPU it sees, and a small
+  // server reports its host's many CPUs (the first version, with the end card decoded alongside, used ~600 MB).
   let errors = "";
+  const enc = spawn(ffmpeg, ["-v", "error", "-y", "-filter_threads", "1",
+    "-thread_queue_size", "2", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", `${W}x${H}`, "-r", String(FPS), "-i", "-", "-i", wav,
+    "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p",      // standard HD colour
+    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+    "-preset", "veryfast", "-tune", "animation", "-crf", "18", "-threads", "1",
+    "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-shortest", "-movflags", "+faststart", out], { stdio: ["pipe", "ignore", "pipe"] });
   enc.stderr.on("data", (d) => { errors += d; });
   enc.stdin.on("error", () => {});      // a broken pipe: reported by the write below and ffmpeg's exit
   const done = new Promise((ok, fail) => {
@@ -174,9 +199,13 @@ export async function renderReel(story, { now = new Date(), out = path.join(os.t
     enc.on("close", (code) => (code ? fail(new Error(`ffmpeg exited with ${code}: ${errors.trim().slice(-300)}`)) : ok()));
   });
   const write = (buf) => new Promise((ok, fail) => enc.stdin.write(buf, (e) => (e ? fail(e) : ok())));
+
   try {
-    for (let n = 0, frames = Math.ceil((END + 0.3) * FPS) + 1; n < frames; n++) {
-      draw(Math.min(n / FPS, END));
+    for (let n = 0, frames = Math.round(DUR * FPS); n < frames; n++) {
+      const t = n / FPS, fade = (t - END) / 0.3;
+      if (t < END) draw(t);
+      else if (fade < 1) { draw(END); ctx.globalAlpha = ease(fade); ctx.drawImage(plain, 0, 0); }      // fades to the end card
+      else drawEnd(t - END - 0.3);
       await write(canvas.data());
     }
     enc.stdin.end();

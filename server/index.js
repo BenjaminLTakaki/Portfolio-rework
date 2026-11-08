@@ -116,10 +116,17 @@ app.get("/api/certior/instagram-status", statsGate, async (_req, res) => {
     res.status(500).json({ error: String(err.message || err) });
   }
 });
-// a story's Reel for the stats page to show and download (?cover: its cover); made once a day, shared with the post
+// a story's Reel for the stats page to show and download (?cover: its cover); made once a day, shared with the post.
+// ?ready starts making it and answers within 20 s whether it's done, so no request outlasts Cloudflare's 100 s.
 app.get("/api/certior/reel/:id", statsGate, async (req, res) => {
   try {
-    const { mp4, cover } = await instagram.preview(req.params.id);
+    const reel = instagram.preview(req.params.id);
+    if ("ready" in req.query) {
+      const made = reel.then(() => true);
+      made.catch(() => {});      // failing after this answer: the next ?ready reports it
+      return res.json({ ready: await Promise.race([made, new Promise((r) => setTimeout(r, 20e3, false))]) });
+    }
+    const { mp4, cover } = await reel;
     res.set("Cache-Control", "no-store").sendFile("cover" in req.query ? cover : mp4);
   } catch (err) {
     res.status(err.status || 502).json({ error: String(err.message || err) });
