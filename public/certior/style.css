@@ -60,6 +60,9 @@ button:active, a:active { opacity: .6; }
 #bar-end { grid-column: 3; justify-self: end; display: flex; }
 #bar-share[hidden] { display: none; }
 #bar-share, #bar-action { display: grid; place-items: center; width: 44px; height: 44px; color: var(--muted); }
+#bar-action { position: relative; }
+#bar-action.new { color: var(--ink); }
+#bar-action.new::after { content: ""; position: absolute; top: 6px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 2px var(--bg); }
 #bar-share svg, #bar-action svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ---- the feed ---- */
@@ -108,7 +111,7 @@ button:active, a:active { opacity: .6; }
 .clip.err .slot .msg { display: block; }
 
 /* Text Only: the clip's headline as the story, then how the other sides put it. Nothing here loads from YouTube. */
-.slot { container-type: size; }
+:root:not(.videos) .slot { container: card / size; }
 .textcard { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 20px 20px 8px; overflow: hidden auto; scrollbar-width: none; }
 .textcard::-webkit-scrollbar { display: none; }      /* only a card too tall for a small phone scrolls; nothing is ever cut off */
 .tc-body { margin: auto 0; }
@@ -125,8 +128,9 @@ button:active, a:active { opacity: .6; }
 .tc-other-head { font-family: var(--serif); font-size: 17px; line-height: 23px; color: var(--muted); }
 
 .meta { padding: 8px 16px 0; display: flex; flex-direction: column; overflow: hidden; }
-.ctitle { margin: 0; font-family: var(--serif); font-size: 18px; line-height: 23px; font-weight: 500; display: -webkit-box;
-  -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; text-wrap: pretty; }
+.ctitle { margin: 0; font-family: var(--serif); font-size: 18px; line-height: 23px; font-weight: 500; text-wrap: pretty; }
+.ctitle.long { font-size: 16px; line-height: 20px; }      /* fitCards: never cut, the box stays the same */
+.ctitle.longer { font-size: 14px; line-height: 17px; }
 .story.seen .ctitle, .story.seen .tc-head { color: var(--muted); }
 .row { display: flex; align-items: center; gap: 4px; margin-top: 2px; min-height: 44px; font-size: 13px; color: var(--muted); }
 .src { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -139,8 +143,10 @@ button:active, a:active { opacity: .6; }
 
 /* ---- player + gesture layer (positioned by app.js) ---- */
 #player-wrap, #gesture { position: fixed; z-index: 5; }
-#player-wrap { background: var(--surface); }
-#player, #player-wrap iframe { width: 100%; height: 100%; display: block; border: 0; }
+#player-wrap { background: none; }
+#player, #player-wrap iframe { width: 100%; height: calc(100% - 3px); display: block; border: 0; background: #000; }
+#progress { position: absolute; inset: auto 0 0; height: 2px; background: var(--hair); overflow: hidden; }
+#progress i { display: block; height: 100%; background: var(--muted); transform: scaleX(0); transform-origin: left; transition: transform 250ms linear; }
 #gesture { z-index: 6; touch-action: none; }
 /* "+10 s" / "−10 s" after a double-tap, on the side you tapped: in the middle band, never on YouTube's controls */
 #skip { position: absolute; top: 50%; right: 24px; transform: translateY(-50%); padding: 6px 12px; border-radius: 999px;
@@ -150,11 +156,10 @@ button:active, a:active { opacity: .6; }
 #player-wrap.away { visibility: hidden; }
 
 /* ---- small messages: over the sides band above the video, never on the video or YouTube's own controls ---- */
-#hint, #new-pill { position: fixed; z-index: 8; left: 16px; right: 16px; top: calc(var(--bar-h) + 6px); min-height: 44px; border-radius: 12px; }
-#hint { display: grid; place-items: center; padding: 6px 14px; background: var(--surface-2); font-size: 14px; line-height: 18px; font-weight: 500;
+#hint { position: fixed; z-index: 8; left: 16px; right: 16px; top: calc(var(--bar-h) + 6px); min-height: 44px; border-radius: 12px;
+  display: grid; place-items: center; padding: 6px 14px; background: var(--surface-2); font-size: 14px; line-height: 18px; font-weight: 500;
   pointer-events: none; text-align: center; box-shadow: 0 0 0 1px var(--hair); }
-#hint[hidden], #new-pill[hidden] { display: none; }
-#new-pill { background: var(--ink); color: var(--bg); font-size: 15px; font-weight: 600; }
+#hint[hidden] { display: none; }
 .status { position: fixed; inset: var(--bar-h) 0 var(--tab-h); display: grid; place-items: center; padding: 32px; text-align: center; color: var(--muted); z-index: 1; pointer-events: none; }
 .status[hidden] { display: none; }
 .status button { pointer-events: auto; color: var(--tint); font-weight: 600; margin-top: 12px; min-height: 44px; }
@@ -284,21 +289,18 @@ dialog::backdrop { background: oklch(0% 0 0 / .6); }
   .sheet[open], .sheet.closing { animation: none; }
   *, *::before { transition-duration: 0ms !important; animation-duration: 0ms !important; }
 }
-:root.videos { --meta-h: 122px; }
+:root.videos { --meta-h: 124px; }
 :root:not(.videos) .row { margin-top: auto; }     /* the title sits under the player; Text Only has it in the card */
 
-/* a short phone: smaller type first; only the State-funded line can go, so Left, Center and Right always show together */
-@container (max-height: 560px) {
+/* a short phone: smaller type first (then fitCards in app.js drops whole lines, never Left, Center or Right) */
+@container card (max-height: 560px) {
   .tc-head { font-size: 22px; line-height: 28px; }
   .tc-others { margin-top: 24px; }
   .tc-other { padding: 8px 0; }
   .tc-other-head { font-size: 15px; line-height: 20px; }
 }
-@container (max-height: 500px) {
-  .tc-other[data-column="state"], .tc-note { display: none; }      /* Compare has both in full */
-  .tc-by { font-size: 14px; }
-}
-@container (max-height: 400px) {
+@container card (max-height: 500px) { .tc-by { font-size: 14px; } }
+@container card (max-height: 400px) {
   .textcard { padding-top: 12px; }
   .tc-head { font-size: 20px; line-height: 25px; }
   .tc-others { margin-top: 16px; }
