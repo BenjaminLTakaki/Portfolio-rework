@@ -8,10 +8,10 @@ import { makePreview, withPreview } from "./swipeNewsPreview.js";
 
 test("only known count names and sane numbers are kept", () => {
   const got = cleanEvents({
-    visit: 1, watched_left: 3, "ref:tiktok.com": 1, share: 999,
+    visit: 1, watched_left: 3, "ref:tiktok.com": 1, share: 999, story_sides: 2,
     email: 1, "ref:<script>": 1, story: -2, compare: 1.5, mode_videos: "1", "ref:": 1,
   });
-  assert.deepEqual(got, [["visit", 1], ["watched_left", 3], ["ref:tiktok.com", 1], ["share", 200]]);
+  assert.deepEqual(got, [["visit", 1], ["watched_left", 3], ["ref:tiktok.com", 1], ["share", 200], ["story_sides", 2]]);
   assert.deepEqual(cleanEvents(null), []);
   assert.deepEqual(cleanEvents([["visit", 1]]), []);
 });

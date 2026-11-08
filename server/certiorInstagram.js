@@ -73,6 +73,10 @@ export function sqlStore(sql) {
     async hasDay(day) {
       return (await sql`SELECT 1 FROM certior_instagram WHERE day = ${day} AND (media_id IS NOT NULL OR at > now() - interval '15 minutes')`).length > 0;
     },
+    async postedDays(days) {      // the days a Reel went out: the stats page marks them on its chart
+      const rows = await sql`SELECT to_char(day, 'YYYY-MM-DD') AS day FROM certior_instagram WHERE media_id IS NOT NULL AND day > current_date - ${days}::int`;
+      return rows.map((r) => r.day);
+    },
     async recentClipIds(days) {
       const rows = await sql`SELECT clip_ids FROM certior_instagram WHERE day > current_date - ${days}::int AND media_id IS NOT NULL`;
       return new Set(rows.flatMap((r) => r.clip_ids));
@@ -127,12 +131,14 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
     return (await res.json()).stories;
   }
 
-  // A story's Reel, made once a day: the stats page's preview and the post share it. A failed one can be tried again.
+  // A story's Reel, made once for the clips it shows (a story gains and swaps clips during the day, and the caption is
+  // always written from the latest): the stats page's preview and the post share it. A failed one can be tried again.
   // One is made at a time: making one takes much of a small server's memory.
   // ponytail: the files stay in the temp folder until the server restarts (every deploy); prune them if that ever matters
   let making = Promise.resolve();
   function reel(story) {
-    const key = `${today()}:${story.id}`;
+    const shown = story.topic === "sports" ? story.clips.slice(0, 3) : SIDES.map(([col]) => firstOf(story, col));
+    const key = `${today()}:${story.id}:${shown.map((c) => c?.id).join(",")}`;
     for (const k of reels.keys()) if (!k.startsWith(today())) reels.delete(k);
     if (!reels.has(key)) {
       const made = making.then(() => render(story, new Date(now())));
@@ -192,6 +198,12 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
   return {
     run,
     preview,
+    /** The caption a story's Reel goes out with, so the stats page can show it before you post. */
+    async caption(storyId) {
+      const story = (await stories()).find((s) => s.id === storyId);
+      if (!story) throw Object.assign(new Error("that story isn't in the feed any more"), { status: 404 });
+      return captionFor(story);
+    },
     /** Starts a post in the background (it takes a few minutes), so the stats page can follow it with job(). */
     start(storyId) {
       if (!job?.running) {

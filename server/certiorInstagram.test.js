@@ -149,6 +149,12 @@ test("the button starts the post in the background and the page can follow it", 
   assert.match(failing.job().error, /Instagram \/17841\/media: nope/);
 });
 
+test("the stats page is shown the exact caption a Reel goes out with", async () => {
+  const p = poster(memoryStore(), fakeInstagram());
+  assert.equal(await p.caption("big"), captionFor(threeSides("big", 2, 3)));
+  await assert.rejects(p.caption("gone"), /isn't in the feed/);
+});
+
 test("a story's Reel is made once: the preview and the post share it", async () => {
   rendered.length = 0;
   const p = poster(memoryStore(), fakeInstagram());
@@ -157,4 +163,17 @@ test("a story's Reel is made once: the preview and the post share it", async () 
   await p.run("big");
   assert.deepEqual(rendered, ["big"]);
   await assert.rejects(p.preview("gone"), /isn't in the feed/);
+});
+
+test("a story whose clips changed gets a new Reel, so the video always matches the caption", async () => {
+  rendered.length = 0;
+  let stories = [threeSides("big", 2, 3)];
+  const ig = fakeInstagram(), p = poster(memoryStore(), ig, {
+    fetchFn: async (url, init) => (new URL(url).hostname.startsWith("graph.") ? ig.fetchFn(url, init) : { ok: true, json: async () => ({ stories }) }),
+  });
+  await p.preview("big");
+  stories = [{ ...stories[0], clips: [clip("bigL2", "left"), ...stories[0].clips] }];      // a new Left clip comes first
+  await p.preview("big");
+  await p.preview("big");
+  assert.deepEqual(rendered, ["big", "big"], "made again once, for the new clips only");
 });

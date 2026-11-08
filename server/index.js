@@ -111,7 +111,10 @@ const instagram = makeInstagramPoster({
 app.get("/api/certior/instagram/:file", instagram.media);
 app.get("/api/certior/instagram-status", statsGate, async (_req, res) => {
   try {
-    res.json({ setUp: !!(process.env.IG_ACCESS_TOKEN || (await igStore.token())), recent: await igStore.recent(7), job: instagram.job() });
+    res.json({
+      setUp: !!(process.env.IG_ACCESS_TOKEN || (await igStore.token())), recent: await igStore.recent(7),
+      postedDays: await igStore.postedDays(30), job: instagram.job(),
+    });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
   }
@@ -128,6 +131,14 @@ app.get("/api/certior/reel/:id", statsGate, async (req, res) => {
     }
     const { mp4, cover } = await reel;
     res.set("Cache-Control", "no-store").sendFile("cover" in req.query ? cover : mp4);
+  } catch (err) {
+    res.status(err.status || 502).json({ error: String(err.message || err) });
+  }
+});
+// the caption a story's Reel goes out with, shown on the stats page before posting
+app.get("/api/certior/caption/:id", statsGate, async (req, res) => {
+  try {
+    res.json({ caption: await instagram.caption(req.params.id) });
   } catch (err) {
     res.status(err.status || 502).json({ error: String(err.message || err) });
   }

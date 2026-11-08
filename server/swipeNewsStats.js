@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 
 // Only these names are kept: anything else in a request is dropped, so nobody can fill the table with junk names.
 export const EVENT_NAME =
-  /^(visit|new|age_(0|1|2_7|8_30|31_plus)|homescreen|browser|mode_(videos|text)|story|watched_(left|center|right|state|unrated)|share|shared_open|compare|recap|search|world|ref:[a-z0-9.-]{1,40})$/;
+  /^(visit|new|age_(0|1|2_7|8_30|31_plus)|homescreen|browser|mode_(videos|text)|story|watched_(left|center|right|state|unrated)|story_sides|share|shared_open|compare|recap|search|world|ref:[a-z0-9.-]{1,40})$/;
 export const MAX_PER_NAME = 200; // one batch from one visit; more is a bug or abuse
 export const MAX_NAMES = 30;
 // ponytail: a caller can still post small fake batches; add a per-address rate limit (in memory, never stored) if that shows up

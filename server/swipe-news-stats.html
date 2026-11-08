@@ -6,301 +6,784 @@
 <meta name="robots" content="noindex">
 <title>Certior Stats</title>
 <style>
+  /* Colour has one meaning each: blue Left and red Right (with the app's grey Center, amber State-funded and grey Not
+     rated) only in the sides chart; one green for new visitors; neutral greys for everything else. Run through the
+     dataviz palette validator against these surfaces:
+     - the sides: lightness band, colour-blind separation (worst adjacent pair dE 9.9 light, 9.4 dark; target 8), normal
+       vision and 3:1 contrast pass in both modes. Red and amber are deeper than the app's so that, at an even
+       lightness, they stay apart for colour-blind readers. The one deliberate fail is the chroma floor on the two greys,
+       because Center and Not rated are grey in the app; so every part also carries its name and number.
+     - new visitors (green) against returning (grey) is the emphasis form: one hue, the rest grey, both at 3:1 or more. */
   :root {
     color-scheme: light dark;
-    --bg: #f5f5f7; --surface: #ffffff; --ink: #16171b; --muted: #5b5f68; --faint: #8a8f99; --hair: #e3e4e8;
-    --mark: #2f7ae5;            /* one hue: validated for light (dataviz validator) */
+    --bg: #f4f4f6; --surface: #ffffff; --inset: #f1f2f5; --band: #f3f5f8; --ink: #16171b; --muted: #5b5f68; --hair: #e2e3e8; --grid: #ebecf0;
+    --bar: #8a8f99; --accent: #16a070; --primary: #2563c7; --up: #1a7f37; --down: #c9302c; --focus: #2563c7;
+    --left: #2f7ae5; --center: #868c97; --right: #b8352e; --state: #ad7e12; --unrated: #5f646d;
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #0b0c0f; --surface: #16171b; --ink: #f4f5f7; --muted: #a9aeb7; --faint: #767b85; --hair: #2a2c32; --mark: #3f8cf7; }
+    :root {
+      --bg: #0b0c0f; --surface: #15161a; --inset: #1d1f24; --band: #1a1c21; --ink: #f4f5f7; --muted: #a9aeb7; --hair: #26282e; --grid: #23252b;
+      --bar: #6b7079; --accent: #199e70; --primary: #2563c7; --up: #3fb950; --down: #ff6b61; --focus: #6aa8ff;
+      --left: #4a90ff; --center: #8f949d; --right: #c7413a; --state: #b8892b; --unrated: #6b7079;
+    }
   }
   * { box-sizing: border-box; }
-  body { margin: 0 auto; max-width: 980px; padding: 24px 16px 64px; background: var(--bg); color: var(--ink); font: 15px/1.45 var(--font); }
-  h1 { font-size: 28px; margin: 0 0 4px; }
-  h2 { font-size: 17px; margin: 0 0 4px; }
-  .note { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
-  section { background: var(--surface); border-radius: 12px; padding: 16px; margin-top: 16px; }
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 16px; }
-  .kpi { background: var(--surface); border-radius: 12px; padding: 14px; }
-  .kpi b { display: block; font-size: 30px; line-height: 1.1; font-variant-numeric: tabular-nums; }
-  .kpi span { display: block; color: var(--muted); font-size: 13px; }
-  .kpi small { display: block; color: var(--faint); font-size: 12px; margin-top: 4px; }
-  .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-  .cols section { margin-top: 0; }
-  .grid-wrap { display: grid; gap: 16px; margin-top: 16px; }
-  .bars { display: grid; gap: 10px; }
-  .bar { display: grid; grid-template-columns: 9.5em 1fr 4.5em; gap: 10px; align-items: center; font-size: 14px; }
-  .bar span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar i { height: 10px; border-radius: 0 4px 4px 0; background: var(--mark); min-width: 2px; }
-  .bar .v { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .empty { color: var(--faint); font-size: 14px; }
-  #daily { width: 100%; height: 180px; display: block; }
-  #daily rect.hit { fill: transparent; }
-  #daily .axis { fill: var(--faint); font-size: 11px; }
-  #daily .grid { stroke: var(--hair); }
-  #tip { position: fixed; pointer-events: none; background: var(--ink); color: var(--bg); padding: 6px 8px; border-radius: 6px; font-size: 12px; display: none; }
-  table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
-  td, th { padding: 6px 8px; border-bottom: 1px solid var(--hair); text-align: right; }
-  td:first-child, th:first-child { text-align: left; }
-  details { margin-top: 16px; }
-  .post { display: grid; grid-template-columns: minmax(0, 300px) 1fr; gap: 16px; align-items: start; }
-  @media (max-width: 640px) { .post { grid-template-columns: 1fr; } }
-  .post img { width: 100%; border-radius: 10px; display: block; }
-  .post video { width: 100%; aspect-ratio: 9 / 16; border-radius: 10px; display: block; background: #0b0c0f; }
-  textarea { width: 100%; min-height: 190px; font: 14px/1.4 var(--font); color: var(--ink); background: var(--bg); border: 1px solid var(--hair); border-radius: 8px; padding: 10px; }
-  select { max-width: 100%; }
-  button, select, .btn { font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--hair); background: var(--bg); color: var(--ink); cursor: pointer; text-decoration: none; display: inline-block; }
-  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  [hidden] { display: none !important; }      /* the layout rules below would otherwise show hidden things */
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+  .page { max-width: 1520px; margin: 0 auto; padding: 36px 40px 72px; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  code { font-size: 0.92em; }
+
+  /* header */
+  .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+  h1 { font-size: 30px; line-height: 1.1; margin: 0; letter-spacing: -0.02em; }
+  h1 span { color: var(--muted); font-weight: 500; }
+  .verdict { margin: 10px 0 0; font-size: 17px; max-width: 70ch; }
+  .fine { margin: 6px 0 0; color: var(--muted); font-size: 13.5px; }
+  .top > div:first-child { min-width: 0; }
+  .top-actions { display: flex; gap: 8px; flex: none; justify-content: flex-end; }
+  .pill { font-size: 14px; font-weight: 500; padding: 8px 14px; border-radius: 999px; border: 1px solid var(--hair); background: var(--surface); color: var(--ink); text-decoration: none; white-space: nowrap; min-height: 38px; display: inline-flex; align-items: center; gap: 6px; }
+  .pill.done { color: var(--up); }
+
+  /* bands and cards */
+  .band { margin-top: 32px; }
+  .band-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; flex-wrap: wrap; margin: 0 0 12px; }
+  h2 { font-size: 13px; font-weight: 650; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin: 0; }
+  h2 .dates { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: 8px; }
+  .card { background: var(--surface); border: 1px solid var(--hair); border-radius: 14px; padding: 20px; min-width: 0; }
+  h3 { font-size: 16px; line-height: 1.3; margin: 0; letter-spacing: -0.01em; }
+  h4 { font-size: 13.5px; font-weight: 600; margin: 18px 0 8px; color: var(--muted); }
+  .note { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+  .card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .key { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); align-items: center; }
+  .key span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 11px; height: 11px; border-radius: 3px; display: inline-block; flex: none; }
+  .ln { width: 16px; height: 0; border-top: 2px solid; display: inline-block; }
+  .ig-badge { font-size: 10px; font-weight: 700; color: var(--muted); border: 1px solid var(--muted); border-radius: 4px; padding: 0 4px; line-height: 14px; }
+  .empty { color: var(--muted); font-size: 14px; margin: 16px 0 0; }
+  .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+  .cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+
+  /* stat tiles: label, number, what it is, then the change and what it's against */
+  .kpi { display: flex; flex-direction: column; padding: 16px 18px 14px; }
+  .kpi-label { font-size: 13.5px; font-weight: 600; color: var(--muted); }
+  .kpi-value { font-size: 32px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; margin-top: 6px; }
+  .kpi-desc { font-size: 13.5px; color: var(--muted); }
+  .kpi-change { font-size: 13.5px; font-weight: 650; margin-top: 10px; }
+  .kpi-change.up { color: var(--up); }
+  .kpi-change.down { color: var(--down); }
+  .kpi-change.flat { color: var(--ink); font-weight: 500; }
+  .kpi-change .vs { color: var(--muted); font-weight: 400; }
+  .spark { display: block; width: 100%; height: 32px; margin-top: auto; padding-top: 12px; overflow: visible; }
+
+  /* visits per day */
+  #daily { display: block; width: 100%; height: 260px; margin-top: 10px; overflow: visible; }
+  @media (min-width: 1600px) { #daily { height: 300px; } }
+  #daily .tick { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  #daily .gridline { stroke: var(--grid); }
+  #daily .shade { fill: var(--band); }
+  #daily .hit { fill: transparent; }
+  #daily .day:hover .hit { fill: var(--inset); }
+  #daily .day:focus { outline: none; }
+  #daily .day:focus .hit { fill: var(--inset); stroke: var(--focus); stroke-width: 2; }
+  #daily .day path, #daily .day text, #daily .day rect.badge { pointer-events: none; }
+  #daily .today-bar { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+  #daily .badge { fill: var(--surface); stroke: var(--muted); }
+  #daily .badge-text { fill: var(--muted); font-size: 10px; font-weight: 700; }
+  #tip { position: fixed; z-index: 10; pointer-events: none; background: var(--ink); color: var(--bg); padding: 9px 11px; border-radius: 8px; font-size: 13px; line-height: 1.45; display: none; max-width: 260px; }
+  #tip b { font-size: 15px; }
+  #tip .tip-day { opacity: 0.8; }
+
+  /* lists of bars: label and number, the bar beneath on a true scale */
+  .lead { margin: 14px 0 0; font-size: 14.5px; }
+  .lead b { font-size: 18px; font-weight: 650; }
+  .rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 14px; }
+  .r-top { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+  .r-top span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .r-top .v { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .r-top .v b { color: var(--ink); font-weight: 600; }
+  .r-bar { height: 8px; margin-top: 5px; background: var(--inset); border-radius: 4px; }
+  .r-bar i { display: block; height: 100%; min-width: 3px; border-radius: 4px; background: var(--bar); }
+  .after { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--hair); font-size: 14px; color: var(--muted); }
+  .after b { color: var(--ink); font-weight: 600; }
+
+  /* clips by side */
+  .split { display: flex; gap: 2px; height: 10px; margin-top: 16px; }
+  .split i { display: block; height: 100%; min-width: 2px; }
+  .split i:first-child { border-radius: 5px 0 0 5px; }
+  .split i:last-child { border-radius: 0 5px 5px 0; }
+  .split i:only-child { border-radius: 5px; }
+  .sides { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 9px; }
+  .sides li { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .sides .v { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sides .v b { color: var(--ink); font-weight: 600; }
+
+  /* in the app */
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+  .duo div { background: var(--inset); border-radius: 10px; padding: 10px 12px; }
+  .duo b { display: block; font-size: 24px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; }
+  .duo span { font-size: 13px; color: var(--muted); }
+
+  /* every number */
+  details.card { margin-top: 12px; padding: 0; }
+  summary { cursor: pointer; padding: 16px 20px; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  summary::-webkit-details-marker { display: none; }
+  summary h3 { display: inline; }
+  .chev { font-size: 14px; font-weight: 500; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .chev::after { content: ""; width: 7px; height: 7px; border-right: 2px solid; border-bottom: 2px solid; transform: rotate(45deg) translateY(-2px); }
+  details[open] .chev::after { transform: rotate(-135deg) translateY(-2px); }
+  .chev .hide, details[open] .chev .show { display: none; }
+  details[open] .chev .hide { display: inline; }
+  .table-wrap { overflow: auto; max-height: 560px; border-top: 1px solid var(--hair); }
+  table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  caption { text-align: left; padding: 10px 12px; color: var(--muted); font-size: 13px; }
+  td, th { padding: 7px 10px; border-bottom: 1px solid var(--hair); text-align: right; white-space: nowrap; }
+  th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
+  #all thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  #all thead tr:nth-child(2) th { top: 33px; }
+  #all .group th { text-align: left; color: var(--ink); border-bottom: 0; }
+  #all th[scope="row"], #all thead th:first-child { position: sticky; left: 0; background: var(--surface); text-align: left; color: var(--ink); font-weight: 500; }
+  #all thead th:first-child { z-index: 2; }
+  #all th[scope="row"] { z-index: 0; }
+  #all .gs { border-left: 1px solid var(--hair); }
+
+  /* posting */
+  .post-card { display: grid; gap: 24px; align-items: start; }
+  .ig-card { grid-template-columns: 211px minmax(0, 1fr) minmax(300px, 420px); }
+  .share-card { grid-template-columns: 300px minmax(0, 1fr); margin-top: 12px; }
+  select { font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--hair); border-radius: 9px; padding: 8px 12px; min-height: 38px; max-width: 560px; width: 100%; }
+  .pick-wrap { display: flex; align-items: center; gap: 10px; flex: 1 1 420px; justify-content: flex-end; }
+  .pick-wrap label { font-size: 14px; color: var(--muted); white-space: nowrap; }
+  figure { margin: 0; }
+  .media img, .media video { display: block; width: 100%; border-radius: 12px; background: #0b0c0f; }
+  .media img { aspect-ratio: 4 / 5; object-fit: cover; }
+  .media video { aspect-ratio: 9 / 16; }
+  figcaption { margin-top: 10px; }
+  .label { display: block; font-size: 13.5px; font-weight: 600; color: var(--muted); margin: 0 0 6px; }
+  .cap-box { white-space: pre-wrap; font: 14px/1.5 var(--font); background: var(--inset); border: 1px solid var(--hair); border-radius: 10px; padding: 10px 12px; margin: 0; max-height: 300px; overflow: auto; }
+  textarea { width: 100%; font: 14px/1.5 var(--font); color: var(--ink); background: var(--inset); border: 1px solid var(--hair); border-radius: 10px; padding: 10px 12px; resize: vertical; field-sizing: content; min-height: 120px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  button, .btn { font: inherit; font-size: 14px; font-weight: 500; min-height: 38px; padding: 8px 14px; border-radius: 9px; border: 1px solid var(--hair); background: var(--surface); color: var(--ink); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  button:hover, .btn:hover { background: var(--inset); }
+  button.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); background: var(--primary); }
+  button:disabled { opacity: 0.45; cursor: default; filter: none; }
+  .btn:not([href]) { opacity: 0.45; pointer-events: none; }
+  .status { margin: 10px 0 0; font-size: 14px; }
+  .why { font-size: 13.5px; color: var(--muted); }
+  #ig-recent td:nth-child(2), #ig-recent th:nth-child(2) { white-space: normal; text-align: left; }
+  #ig-recent td:first-child, #ig-recent th:first-child { text-align: left; }
+  #ig-recent { margin-top: 8px; }
+  .errbox { border-color: var(--down); }
+  .errbox p { margin: 6px 0 12px; }
+
+  @media (max-width: 1180px) {
+    .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cols { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ig-card { grid-template-columns: 211px minmax(0, 1fr); }
+    .ig-card .recent { grid-column: 1 / -1; }
+  }
+  @media (max-width: 720px) {
+    .page { padding: 20px 16px 48px; }
+    .top { flex-direction: column; }
+    .top-actions { justify-content: flex-start; flex-wrap: wrap; }
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cols, .ig-card, .share-card { grid-template-columns: 1fr; }
+    .media { max-width: 300px; }
+  }
 </style>
 </head>
 <body>
-<h1>Certior</h1>
-<p class="note">Anonymous daily totals from the app: no cookies, IDs or addresses. A visitor is one device on one day. Last 7 days, against the 7 before.</p>
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Certior <span>stats</span></h1>
+      <p class="verdict" id="verdict">Loading the numbers…</p>
+      <p class="fine">Anonymous daily totals from the app: no cookies, IDs or addresses. A visit is one device on one day; days run on UTC. <span id="fresh"></span></p>
+    </div>
+    <div class="top-actions">
+      <a class="pill" id="today-pill" href="#posting">Today’s Reel: checking…</a>
+      <button type="button" id="refresh">Refresh</button>
+      <a class="btn" href="/certior/" target="_blank" rel="noopener">Open Certior <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
 
-<div class="kpis" id="kpis"></div>
+  <main>
+    <div id="stats">
+      <section class="band" aria-labelledby="week-title">
+        <div class="band-head">
+          <h2 id="week-title">Last 7 days<span class="dates" id="week-dates"></span></h2>
+          <div class="key" id="week-key" hidden><span>Under each number, one point a day:</span><span><i class="ln" style="border-color: var(--muted)"></i><span id="key-prev"></span></span><span><i class="ln" style="border-color: var(--ink)"></i><span id="key-cur"></span></span></div>
+        </div>
+        <div class="kpis" id="kpis"><p class="empty">Loading…</p></div>
+      </section>
 
-<div class="grid-wrap">
-  <section>
-    <h2>Visitors per day</h2>
-    <p class="note">Last 30 days. Hover a day for its numbers.</p>
-    <svg id="daily" role="img" aria-label="Visitors per day, last 30 days"></svg>
-  </section>
-  <div class="cols">
-    <section>
-      <h2>Where visitors came from</h2>
-      <p class="note">Last 30 days: <code>?ref=</code> on links you post, else the site that linked here. Most visits have neither.</p>
-      <div class="bars" id="refs"></div>
+      <section class="band" aria-labelledby="visits-title">
+        <div class="band-head"><h2 id="visits-title">Visits</h2></div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h3>Visits per day</h3>
+              <p class="note" id="daily-note">Last 30 days. The shaded week is the one above; today is an outline because it isn’t over. Point at a day, or tab to the chart and use the arrow keys.</p>
+            </div>
+            <div class="key" id="daily-key">
+              <span><i class="sw" style="background: var(--accent)"></i>New</span>
+              <span><i class="sw" style="background: var(--bar)"></i>Returning</span>
+              <span><b class="ig-badge">IG</b>A Reel went out</span>
+            </div>
+          </div>
+          <svg id="daily" role="group" aria-label="Visits per day for the last 30 days, split into new and returning. Use the arrow keys to move between days."></svg>
+        </div>
+
+        <div class="cols">
+          <section class="card" aria-labelledby="from-title">
+            <h3 id="from-title">Where visits came from</h3>
+            <p class="note">Last 7 days, by link or referring site.</p>
+            <div id="refs"></div>
+          </section>
+          <section class="card" aria-labelledby="age-title">
+            <h3 id="age-title">Coming back</h3>
+            <p class="note">Last 7 days, by time since first visit.</p>
+            <div id="ages"></div>
+          </section>
+          <section class="card" aria-labelledby="sides-title">
+            <h3 id="sides-title">Clips watched, by side</h3>
+            <p class="note">Last 7 days. Every story offers all sides.</p>
+            <div id="sides"></div>
+          </section>
+          <section class="card" aria-labelledby="use-title">
+            <h3 id="use-title">In the app</h3>
+            <p class="note">Last 7 days.</p>
+            <div id="use"></div>
+          </section>
+        </div>
+      </section>
+
+      <details class="card" id="numbers">
+        <summary><span><h3>Every number</h3><span class="note" style="display: block">Each day of the last 60, as a table: everything the charts show.</span></span><span class="chev"><span class="show">Show</span><span class="hide">Hide</span></span></summary>
+        <div class="table-wrap"><table id="all"></table></div>
+      </details>
+    </div>
+
+    <section class="band" id="posting" aria-labelledby="post-title">
+      <div class="band-head">
+        <h2 id="post-title">Posting</h2>
+        <div class="pick-wrap"><label for="pick">Story</label><select id="pick"></select></div>
+      </div>
+      <p class="note" id="pick-note" style="margin-top: -4px">Stories from the last day that all three sides covered, most outlets first. Both cards below follow your pick.</p>
+
+      <section class="card post-card ig-card" aria-labelledby="ig-title" style="margin-top: 12px">
+        <figure class="media">
+          <video id="reel" controls playsinline preload="metadata" aria-label="The Reel of the story picked above"></video>
+          <figcaption><a class="btn" id="reel-download" download>Download Reel</a></figcaption>
+        </figure>
+        <div>
+          <h3 id="ig-title">Post to Instagram</h3>
+          <p class="note" id="ig-note">Posts only when you press the button: at most once a day, and only a story from the last day that all three sides covered.</p>
+          <p class="note" id="reel-note"></p>
+          <span class="label" style="margin-top: 14px">Caption on Instagram</span>
+          <pre class="cap-box" id="ig-caption">…</pre>
+          <div class="row"><button type="button" class="primary" id="ig-run">Post this Reel</button><span class="why" id="ig-why"></span></div>
+          <p class="status" id="ig-result" role="status"></p>
+        </div>
+        <div class="recent">
+          <h4 style="margin-top: 0">Recent posts</h4>
+          <table id="ig-recent"></table>
+        </div>
+      </section>
+
+      <section class="card post-card share-card" aria-labelledby="share-title">
+        <figure class="media">
+          <img id="card" alt="The story as a card">
+          <figcaption><a class="btn" id="download">Download image</a></figcaption>
+        </figure>
+        <div>
+          <h3 id="share-title">Share elsewhere</h3>
+          <p class="note">For any other feed: the card, and a caption you can edit.</p>
+          <label class="label" for="caption" style="margin-top: 14px">Caption, with a link that counts as “Your caption link”</label>
+          <textarea id="caption"></textarea>
+          <div class="row"><button type="button" id="copy">Copy caption</button><span class="why" id="copy-status" role="status"></span></div>
+        </div>
+      </section>
     </section>
-    <section>
-      <h2>How long ago they first came</h2>
-      <p class="note">Visits in the last 7 days, by how long ago that device first opened the app. More beyond "first day" means people come back.</p>
-      <div class="bars" id="ages"></div>
-    </section>
-    <section>
-      <h2>Clips watched, by side</h2>
-      <p class="note">Last 7 days.</p>
-      <div class="bars" id="sides"></div>
-    </section>
-    <section>
-      <h2>What people do</h2>
-      <p class="note">Last 7 days.</p>
-      <table id="use"></table>
-    </section>
-  </div>
+  </main>
 </div>
-
-<section>
-  <h2>Today's post</h2>
-  <p class="note">A story from the last day that all three sides covered, as a card to post, with a caption and a link that counts as <code>ref=social</code>. The Instagram Reel below is of the same story.</p>
-  <div class="row"><select id="pick" aria-label="Story for today's post"></select></div>
-  <div class="post" style="margin-top: 12px">
-    <img id="card" alt="Today's share card">
-    <div>
-      <textarea id="caption" aria-label="Caption"></textarea>
-      <div class="row">
-        <a class="btn" id="download" download="certior.png">Download Image</a>
-        <button type="button" id="copy">Copy Caption</button>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section>
-  <h2>Instagram</h2>
-  <p class="note" id="ig-note">Checking…</p>
-  <div class="post" style="margin-top: 12px">
-    <video id="reel" controls playsinline preload="metadata" aria-label="The Reel of the story picked above"></video>
-    <div>
-      <p class="note" id="reel-note"></p>
-      <div class="row">
-        <button type="button" id="ig-run">Post This Reel</button>
-        <a class="btn" id="reel-download" download>Download Reel</a>
-      </div>
-      <p class="note" id="ig-result" style="margin-top: 10px" role="status"></p>
-      <table id="ig-recent"></table>
-    </div>
-  </div>
-</section>
-
-<details>
-  <summary>All daily numbers</summary>
-  <div style="overflow-x: auto"><table id="all"></table></div>
-</details>
-
 <div id="tip" role="tooltip"></div>
 
 <script type="module">
-import { storyCard } from '/certior/card.js';
-
 const $ = (s) => document.querySelector(s);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
-const fmt = (n) => n.toLocaleString('en');
-const day = (t) => new Date(t).toISOString().slice(0, 10);
-const today = day(Date.now());
-const daysBack = (n) => day(Date.now() - n * 864e5);
+const svgEl = (tag, attrs = {}) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
+const fmt = (n) => Math.round(n).toLocaleString('en');
+const DAY = 864e5;
+const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
+const daysBack = (n) => dayKey(Date.now() - n * DAY);
+const shift = (d, n) => dayKey(Date.parse(`${d}T12:00:00Z`) + n * DAY);
+const today = daysBack(0);
+const short = (d, o = {}) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC', ...o });
+const span = ([a, b]) => (a.slice(0, 7) === b.slice(0, 7) ? `${short(a, { month: undefined })}–${short(b)}` : `${short(a)}–${short(b)}`);
+const clock = (t) => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
+// Whole days everywhere: the last 7 before today, and the 7 before those. Today is shown on its own (it isn't over).
+const cur = [daysBack(7), daysBack(1)], prev = [daysBack(14), daysBack(8)];
+const ratio = (a, b) => (b ? a / b : null);
+const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
+const many = (n, word) => `${fmt(n)} ${word}${Math.round(n) === 1 ? '' : 's'}`;
+$('#refresh').onclick = () => location.reload();
+$('#fresh').textContent = `Loaded ${clock(Date.now())} UTC.`;
 
-const { rows } = await (await fetch('/api/swipe-news/stats')).json();
-const byDay = {};
-for (const r of rows) (byDay[r.day] ||= {})[r.name] = r.n;
-const sum = (name, from, to = today) => Object.entries(byDay).filter(([d]) => d > from && d <= to).reduce((a, [, v]) => a + (v[name] || 0), 0);
-const sumWhere = (test, from) => Object.entries(byDay).filter(([d]) => d > from).reduce((a, [, v]) => a + Object.entries(v).filter(([k]) => test(k)).reduce((b, [, n]) => b + n, 0), 0);
-const last7 = daysBack(7), prev7 = daysBack(14), last30 = daysBack(30);
+// Everything is asked for at once: the numbers, the post history, today's stories.
+const getStatus = () => fetch('/api/certior/instagram-status').then((r) => (r.ok ? r.json() : { status: r.status })).catch(() => ({ status: 0 }));
+const firstStatus = getStatus();
+const feedP = fetch(`https://benjaminltakaki.github.io/certior-news/feed.json?t=${Date.now()}`).then((r) => r.json()).catch(() => null);
+const statsP = fetch('/api/swipe-news/stats').then(async (r) => (r.ok ? r.json() : Promise.reject(new Error(`the server answered ${r.status}`))));
 
-// ---- headline numbers
-function kpi(label, value, before, fmtValue = fmt) {
-  const box = el('div', null, 'kpi');
-  box.append(el('b', fmtValue(value)), el('span', label));
-  if (before != null) {
-    const d = before ? Math.round(((value - before) / before) * 100) : null;
-    box.append(el('small', d == null ? (value ? 'new this week' : 'none the week before') : `${d >= 0 ? '+' : ''}${d}% vs the 7 days before`));
+// ---- the numbers, as { day: { name: n } }
+let byDay = {}, haveStats = false, posted = new Set();
+const inRange = (d, [a, b]) => d >= a && d <= b;
+const sumWhere = (test, range) => Object.entries(byDay).reduce((t, [d, v]) => t + (inRange(d, range) ? Object.entries(v).reduce((u, [k, n]) => u + (test(k) ? n : 0), 0) : 0), 0);
+const sum = (name, range) => sumWhere((k) => k === name, range);
+const clips = (range) => sumWhere((k) => k.startsWith('watched_'), range);
+let firstDay = null;
+const daysIn = ([a, b]) => (firstDay ? Math.max(0, Math.round((Date.parse(b) - Date.parse(a > firstDay ? a : firstDay)) / DAY) + 1) : 0);
+const perDay = (r) => (daysIn(r) ? sum('visit', r) / daysIn(r) : null);
+// of the devices new on each day, how many came back the next day (age_1 on day D is a device first seen on D - 1)
+const nextDay = ([a, b]) => ratio(sum('age_1', [a, b]), sum('new', [shift(a, -1), shift(b, -1)]));
+
+// ---- where visits came from: one name per site
+const SITES = {
+  'instagram.com': 'Instagram', instagram: 'Instagram', 'tiktok.com': 'TikTok', tiktok: 'TikTok', 'youtube.com': 'YouTube', 'youtu.be': 'YouTube',
+  'facebook.com': 'Facebook', 'bing.com': 'Bing', 'duckduckgo.com': 'DuckDuckGo', 'reddit.com': 'Reddit', 't.co': 'X', 'x.com': 'X', 'twitter.com': 'X',
+  'bsky.app': 'Bluesky', bluesky: 'Bluesky', 'linkedin.com': 'LinkedIn', 'lnkd.in': 'LinkedIn', 'threads.net': 'Threads',
+  'news.ycombinator.com': 'Hacker News', 'benjamintakaki.com': 'Your portfolio', social: 'Your caption link', share: 'Shared by people',
+};
+const site = (k) => { const h = k.replace(/^(www|m|l|lm|mobile)\./, ''); return SITES[k] || SITES[h] || (/^google\./.test(h) ? 'Google' : h); };
+
+try {
+  for (const x of (await statsP).rows) (byDay[x.day] ||= {})[x.name] = x.n;
+  firstDay = Object.keys(byDay).sort()[0] || null;
+  haveStats = true;
+} catch (err) {
+  const box = el('section', null, 'card errbox band');
+  const retry = el('button', 'Try again');
+  retry.type = 'button'; retry.onclick = () => location.reload();
+  box.append(el('h3', 'Couldn’t load the numbers'), el('p', `${err.message}. Posting below still works.`), retry);
+  $('#stats').replaceChildren(box);
+  $('#verdict').textContent = 'The numbers didn’t load.';
+}
+
+// ---- stat tiles: the last 7 days against the 7 before
+const KPIS = [
+  { label: 'Visitors a day', kind: 'avg', value: perDay, show: (x) => fmt(x), desc: (r) => `${many(sum('visit', r), 'visit')} in ${many(daysIn(r), 'day')}` },
+  { label: 'New devices', kind: 'count', value: (r) => sum('new', r), show: fmt, desc: () => 'first time on Certior' },
+  { label: 'Came back the next day', kind: 'ratio', value: nextDay, show: pct, desc: () => 'of new devices' },
+  { label: 'Watched 2+ sides', kind: 'ratio', value: (r) => (Object.values(byDay).some((v) => v.story_sides) ? ratio(sum('story_sides', r), sum('story', r)) : null), show: pct,
+    desc: () => 'of stories opened', none: 'Counting starts with this update' },
+  { label: 'Clips per visit', kind: 'avg', value: (r) => ratio(clips(r), sum('visit', r)), show: (x) => x.toFixed(1), desc: (r) => `from ${(ratio(sum('story', r), sum('visit', r)) || 0).toFixed(1)} stories seen a visit` },
+  { label: 'Shares', kind: 'count', value: (r) => sum('share', r), show: fmt, desc: (r) => `${many(sum('shared_open', r), 'open')} of shared links` },
+];
+// what changed, in words a glance can take: small moves read "about the same", small counts as a plain difference
+function change(k, a, b) {
+  if (a == null || (a === 0 && !b)) return { text: k.none || 'Nothing yet', dir: 0 };
+  if (b == null || !daysIn(prev)) return { text: 'Nothing to compare with yet', dir: 0 };
+  if (k.kind === 'ratio') {
+    const d = Math.round(a * 100) - Math.round(b * 100);      // from the shown percentages, so the arrow matches them
+    return { text: `${pct(b)} → ${pct(a)}`, dir: Math.abs(d) >= 2 ? Math.sign(d) : 0, vs: true };
   }
-  return box;
+  if (k.kind === 'count' && Math.max(a, b) < 20) {
+    const d = a - b;      // a few either way is noise: no colour until it's 5 or more
+    return { text: d ? `${d > 0 ? '+' : '−'}${Math.abs(d)}` : 'Same', dir: Math.abs(d) >= 5 ? Math.sign(d) : 0, vs: true };
+  }
+  if (!b) return { text: 'New this week', dir: 1 };
+  const d = ((a - b) / b) * 100;
+  return Math.abs(d) < 5 ? { text: 'About the same', dir: 0, vs: true } : { text: `${Math.round(Math.abs(d))}%`, dir: Math.sign(d), vs: true };
 }
-const visits = sum('visit', last7), visitsBefore = sum('visit', prev7, last7);
-const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '0%');
-const back = visits - sum('age_0', last7);
-$('#kpis').append(
-  kpi('Visitors', visits, visitsBefore),
-  kpi('New devices', sum('new', last7), sum('new', prev7, last7)),
-  kpi('Came back', back, null, () => pct(back, visits)),
-  kpi('From the Home Screen', sum('homescreen', last7), null, () => pct(sum('homescreen', last7), visits)),
-  kpi('Shares', sum('share', last7), sum('share', prev7, last7)),
-  kpi('Opened a shared link', sum('shared_open', last7), sum('shared_open', prev7, last7)),
-);
+function spark(values) {
+  const known = values.filter((v) => v != null);
+  if (known.length < 2) return null;
+  const lo = Math.min(...known), hi = Math.max(...known), pad = (hi - lo) * 0.15 || 1;
+  const s = svgEl('svg', { viewBox: '0 0 140 32', class: 'spark', preserveAspectRatio: 'none', 'aria-hidden': 'true' });
+  const pt = (v, i) => [(i / 13) * 136 + 2, 30 - ((v - lo + pad) / (hi - lo + 2 * pad)) * 28];
+  for (const [from, to, color, w] of [[0, 7, 'var(--muted)', 1.5], [7, 13, 'var(--ink)', 2]]) {
+    const pts = values.slice(from, to + 1).map((v, i) => (v == null ? null : pt(v, from + i).join(','))).filter(Boolean);
+    if (pts.length > 1) s.append(svgEl('polyline', { points: pts.join(' '), fill: 'none', stroke: color, 'stroke-width': w, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'vector-effect': 'non-scaling-stroke' }));
+  }
+  if (values[13] != null) { const [x, y] = pt(values[13], 13); s.append(svgEl('circle', { cx: x, cy: y, r: 2.5, fill: 'var(--ink)' })); }
+  return s;
+}
+const days14 = [...Array(14).keys()].map((i) => daysBack(14 - i));
+function tiles() {
+  $('#kpis').textContent = '';
+  for (const k of KPIS) {
+    const a = k.value(cur), b = k.value(prev), c = change(k, a, b);
+    const box = el('div', null, 'card kpi'), d = el('div', null, `kpi-change ${c.dir > 0 ? 'up' : c.dir < 0 ? 'down' : 'flat'}`);
+    if (c.dir) {
+      const arrow = el('span', c.dir > 0 ? '↑ ' : '↓ ');
+      arrow.setAttribute('aria-hidden', 'true');
+      d.append(el('span', c.dir > 0 ? 'Up: ' : 'Down: ', 'sr'), arrow);
+    }
+    d.append(c.text);
+    if (c.vs) d.append(el('span', ` vs ${span(prev)}`, 'vs'));
+    box.append(el('div', k.label, 'kpi-label'), el('div', a == null ? '—' : k.show(a), 'kpi-value'));
+    if (a) box.append(el('div', k.desc(cur), 'kpi-desc'));
+    box.append(d);
+    const series = days14.map((day) => k.value([day, day])), sp = a && series.some((v) => v) ? spark(series) : null;
+    if (sp) box.append(sp);
+    $('#kpis').append(box);
+  }
+}
 
-// ---- visitors per day: one series, so no legend; hover for the day's numbers
-const svg = $('#daily'), tip = $('#tip'), W = svg.clientWidth || 900, H = 180, padL = 32, padB = 22, padT = 8;
-svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-const days = [...Array(30).keys()].map((i) => daysBack(29 - i));
-const values = days.map((d) => byDay[d]?.visit || 0);
-const max = Math.max(4, ...values), step = (W - padL) / days.length, bw = Math.max(2, step - 2);
-const y = (v) => H - padB - (v / max) * (H - padB - padT);
-const ns = (tag, attrs) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
-for (const v of [0, Math.round(max / 2), max]) {
-  svg.append(ns('line', { x1: padL, x2: W, y1: y(v), y2: y(v), class: 'grid' }));
-  const t = ns('text', { x: padL - 6, y: y(v) + 4, 'text-anchor': 'end', class: 'axis' }); t.textContent = v; svg.append(t);
+// ---- visits per day: new on top of returning, the week above shaded, today an outline, a badge on Reel days
+const tip = $('#tip');
+function showTip(lines, x, y) {
+  tip.textContent = '';
+  lines.forEach(([text, cls], i) => { if (i) tip.append(el('br')); tip.append(el(cls === 'b' ? 'b' : 'span', text, cls === 'b' ? null : cls)); });
+  tip.style.display = 'block';
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = `${Math.min(Math.max(8, x + 14), innerWidth - w - 8)}px`;
+  tip.style.top = `${y + 14 + h > innerHeight ? y - h - 10 : y + 14}px`;
 }
-days.forEach((d, i) => {
-  const x = padL + i * step + 1, h = H - padB - y(values[i]);
-  if (h > 0) svg.append(ns('path', { d: `M${x},${H - padB} v${-Math.max(0, h - 4)} q0,-4 4,-4 h${bw - 8} q4,0 4,4 v${Math.max(0, h - 4)} z`, fill: 'var(--mark)' }));
-  const hit = ns('rect', { x: padL + i * step, y: padT, width: step, height: H - padT - padB, class: 'hit' });
-  hit.addEventListener('pointermove', (e) => {
-    const v = byDay[d] || {};
-    tip.textContent = `${new Date(d).toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short' })}: ${v.visit || 0} visitors, ${v.new || 0} new, ${v.share || 0} shares`;
-    tip.style.display = 'block'; tip.style.left = `${Math.min(e.clientX + 12, innerWidth - 260)}px`; tip.style.top = `${e.clientY + 12}px`;
+const hideTip = () => { tip.style.display = 'none'; };
+addEventListener('keydown', (e) => { if (e.key === 'Escape') hideTip(); });
+const column = (x, y, w, h, round) => {
+  const r = round ? Math.min(4, w / 2, h) : 0;
+  return `M${x},${y + h}V${y + r}${r ? `Q${x},${y} ${x + r},${y}` : ''}H${x + w - r}${r ? `Q${x + w},${y} ${x + w},${y + r}` : ''}V${y + h}Z`;
+};
+function niceScale(max) {      // the lowest round top above the tallest day, in 3 to 5 round steps
+  const mag = 10 ** Math.floor(Math.log10(max / 5));
+  const best = [1, 2, 2.5, 5, 10, 20, 25, 50].map((m) => m * mag).map((step) => ({ step, top: Math.ceil(max / step) * step }))
+    .filter(({ step, top }) => Number.isInteger(step) && top / step <= 5 && top / step >= 3).sort((a, b) => a.top - b.top || b.step - a.step)[0];
+  return best || { step: Math.ceil(max / 4), top: Math.ceil(max / 4) * 4 };
+}
+const topLink = (v) => {
+  const by = {};
+  for (const [k, n] of Object.entries(v)) if (k.startsWith('ref:')) by[site(k.slice(4))] = (by[site(k.slice(4))] || 0) + n;
+  return Object.entries(by).sort((a, b) => b[1] - a[1])[0];
+};
+let focusDay = 29;
+function drawDaily() {
+  const svg = $('#daily');
+  const days = [...Array(30).keys()].map((i) => daysBack(29 - i));
+  const data = days.map((d) => {
+    const v = byDay[d] || {}, visit = v.visit || 0, fresh = Math.min(visit, v.age_0 || 0);
+    return { d, visit, fresh, back: visit - fresh, share: v.share || 0, link: topLink(v) };
   });
-  hit.addEventListener('pointerleave', () => { tip.style.display = 'none'; });
-  svg.append(hit);
-});
-for (const i of [0, 29]) {
-  const t = ns('text', { x: padL + i * step + step / 2, y: H - 6, 'text-anchor': i ? 'end' : 'start', class: 'axis' });
-  t.textContent = new Date(days[i]).toLocaleDateString('en', { day: 'numeric', month: 'short' }); svg.append(t);
+  svg.textContent = '';
+  if (!data.some((x) => x.visit)) {
+    svg.style.display = 'none'; $('#daily-key').hidden = true; $('#daily-note').textContent = 'Last 30 days.';
+    if (!$('#daily-empty')) svg.after(Object.assign(el('p', 'No visits yet. Numbers appear after the first visit; comparisons once there are 14 days of them.', 'empty'), { id: 'daily-empty' }));
+    return;
+  }
+  const W = svg.clientWidth || 1100, H = svg.clientHeight || 260, padL = 40, padR = 2, padT = 30, padB = 30;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const { step, top } = niceScale(Math.max(4, ...data.map((x) => x.visit)));
+  const base = H - padB, y = (n) => base - (n / top) * (base - padT), slot = (W - padL - padR) / days.length, bw = Math.min(24, slot * 0.62);
+  // the week the tiles count, shaded and dated
+  const c0 = days.indexOf(cur[0]), c1 = days.indexOf(cur[1]);
+  svg.append(svgEl('rect', { x: padL + c0 * slot, y: padT - 22, width: (c1 - c0 + 1) * slot, height: base - padT + 22, rx: 6, class: 'shade' }));
+  const wk = svgEl('text', { x: padL + c0 * slot + 8, y: padT - 8, class: 'tick' }); wk.textContent = span(cur); svg.append(wk);
+  for (let t = 0; t <= top + 1e-9; t += step) {
+    svg.append(svgEl('line', { x1: padL, x2: W - padR, y1: y(t), y2: y(t), class: 'gridline' }));
+    const label = svgEl('text', { x: padL - 8, y: y(t) + 4, 'text-anchor': 'end', class: 'tick' });
+    label.textContent = fmt(t); svg.append(label);
+  }
+  data.forEach((x, i) => {
+    const isToday = x.d === today, when = isToday ? 'Today so far' : short(x.d, { weekday: 'short' }), reel = posted.has(x.d);
+    const label = `${when}: ${many(x.visit, 'visit')}, ${fmt(x.fresh)} new, ${fmt(x.back)} returning` +
+      `${x.link ? `, top link ${x.link[0]} (${fmt(x.link[1])})` : ''}${x.share ? `, ${many(x.share, 'share')}` : ''}${reel ? ', a Reel went out' : ''}`;
+    const g = svgEl('g', { class: 'day', tabindex: i === focusDay ? 0 : -1, role: 'img', 'aria-label': label });
+    g.append(svgEl('rect', { x: padL + i * slot + 1, y: padT - 6, width: slot - 2, height: base - padT + 6, rx: 4, class: 'hit' }));
+    const bx = padL + i * slot + (slot - bw) / 2;
+    if (isToday) {
+      if (x.visit) g.append(svgEl('path', { d: column(bx + 0.75, y(x.visit) + 0.75, bw - 1.5, base - y(x.visit) - 0.75, true), class: 'today-bar' }));
+    } else {
+      if (x.back) g.append(svgEl('path', { d: column(bx, y(x.back), bw, base - y(x.back), !x.fresh), fill: 'var(--bar)' }));
+      const freshBottom = x.back ? y(x.back) - 2 : base;
+      if (x.fresh && freshBottom - y(x.visit) > 0.5) g.append(svgEl('path', { d: column(bx, y(x.visit), bw, freshBottom - y(x.visit), true), fill: 'var(--accent)' }));
+    }
+    if (reel) {
+      const mid = bx + bw / 2, by = y(x.visit) - 20;
+      g.append(svgEl('rect', { x: mid - 11, y: by, width: 22, height: 14, rx: 3, class: 'badge' }));
+      const t = svgEl('text', { x: mid, y: by + 10.5, 'text-anchor': 'middle', class: 'badge-text' }); t.textContent = 'IG'; g.append(t);
+    }
+    const lines = () => [[when, 'tip-day'], [many(x.visit, 'visit'), 'b'], [`${fmt(x.fresh)} new · ${fmt(x.back)} returning`],
+      ...(x.link ? [[`Top link: ${x.link[0]} (${fmt(x.link[1])} of ${fmt(x.visit)})`]] : []), ...(x.share ? [[many(x.share, 'share')]] : []),
+      ...(reel ? [['A Reel went out']] : [])];
+    g.addEventListener('pointermove', (e) => showTip(lines(), e.clientX, e.clientY));
+    g.addEventListener('pointerleave', hideTip);
+    g.addEventListener('focus', () => { focusDay = i; const b = g.getBoundingClientRect(); showTip(lines(), b.left + b.width / 2, b.top + 24); });
+    g.addEventListener('blur', hideTip);
+    svg.append(g);
+    const monday = new Date(`${x.d}T12:00:00Z`).getUTCDay() === 1;
+    if (isToday || (monday && i < days.length - 3)) {
+      const t = svgEl('text', { x: padL + i * slot + slot / 2, y: H - 8, 'text-anchor': 'middle', class: 'tick' });
+      t.textContent = isToday ? 'Today' : short(x.d, { weekday: 'short' }); svg.append(t);
+    }
+  });
 }
+$('#daily').addEventListener('keydown', (e) => {
+  const to = { ArrowLeft: focusDay - 1, ArrowRight: focusDay + 1, Home: 0, End: 29 }[e.key];
+  if (to == null) return;
+  e.preventDefault();
+  const days = [...$('#daily').querySelectorAll('.day')], next = days[Math.min(29, Math.max(0, to))];
+  days.forEach((d) => d.setAttribute('tabindex', d === next ? 0 : -1));
+  next.focus();
+});
+let resizing = 0;
+addEventListener('resize', () => { cancelAnimationFrame(resizing); resizing = requestAnimationFrame(() => { if (haveStats) drawDaily(); }); });
 
-// ---- ranked/ordered bars, values printed beside them
-function bars(box, items, empty) {
-  if (!items.some(([, n]) => n)) { box.append(el('p', empty, 'empty')); return; }
-  const top = Math.max(...items.map(([, n]) => n));
-  for (const [label, n, extra] of items) {
-    const row = el('div', null, 'bar'), fill = el('i');
-    fill.style.width = `${(n / top) * 100}%`;
-    row.title = `${label}: ${fmt(n)}`;
-    row.append(el('span', label), fill, el('span', extra ?? fmt(n), 'v'));
-    box.append(row);
+// ---- the cards
+// whole-number percentages that add up to 100 (largest remainder)
+function shares(counts) {
+  const total = counts.reduce((a, b) => a + b, 0);
+  if (!total) return counts.map(() => 0);
+  const raw = counts.map((n) => (n / total) * 100), out = raw.map(Math.floor);
+  raw.map((r, i) => [r - Math.floor(r), i]).sort((a, b) => b[0] - a[0]).slice(0, 100 - out.reduce((a, b) => a + b, 0)).forEach(([, i]) => { out[i]++; });
+  return out;
+}
+function barRows(box, items) {      // items: [label, n, share 0..100]; bars on one true scale
+  const rows = el('div', null, 'rows');
+  for (const [label, n, p] of items) {
+    const row = el('div'), head = el('div', null, 'r-top'), v = el('span', null, 'v'), bar = el('div', null, 'r-bar'), fill = el('i');
+    v.append(el('b', `${p}%`), ` · ${fmt(n)}`);
+    head.append(el('span', label), v);
+    fill.style.width = `${p}%`;
+    bar.append(fill);
+    row.append(head, bar);
+    rows.append(row);
+  }
+  box.append(rows);
+}
+const emptyNote = (box, text) => box.append(el('p', text, 'empty'));
+function sources() {
+  const box = $('#refs'), visits = sum('visit', cur), by = {};
+  for (const [d, v] of Object.entries(byDay)) if (inRange(d, cur)) for (const [k, n] of Object.entries(v)) if (k.startsWith('ref:')) by[site(k.slice(4))] = (by[site(k.slice(4))] || 0) + n;
+  if (!visits) return emptyNote(box, 'No visits in the last 7 days.');
+  const linked = Object.values(by).reduce((a, b) => a + b, 0), lead = el('p', null, 'lead');
+  lead.append(el('b', fmt(linked)), ` of ${fmt(visits)} visits (${pct(linked / visits)}) came through a link`);
+  box.append(lead);
+  if (linked) {
+    const ranked = Object.entries(by).sort((a, b) => b[1] - a[1]), top = ranked.slice(0, 5), rest = ranked.slice(5).reduce((a, [, n]) => a + n, 0);
+    if (rest) top.push(['Other sites', rest]);
+    const p = shares(top.map(([, n]) => n));
+    barRows(box, top.map(([name, n], i) => [name, n, p[i]]));
+  }
+  const after = el('p', null, 'after');
+  after.append(el('b', fmt(visits - linked)), ` (${pct((visits - linked) / visits)}) with no link or referrer: the Home Screen, bookmarks, typed in, chat apps.`);
+  box.append(after);
+}
+function ages() {
+  const box = $('#ages'), visits = sum('visit', cur);
+  if (!visits) return emptyNote(box, 'No visits in the last 7 days.');
+  const lead = el('p', null, 'lead'), back = visits - sum('age_0', cur);
+  lead.append(el('b', pct(back / visits)), ' of visits were by devices that had been before');
+  box.append(lead);
+  const items = [['First day', 'age_0'], ['Second day', 'age_1'], ['Days 3 to 8', 'age_2_7'], ['Days 9 to 31', 'age_8_30'], ['After a month', 'age_31_plus']].map(([l, k]) => [l, sum(k, cur)]);
+  const p = shares(items.map(([, n]) => n));
+  barRows(box, items.map(([l, n], i) => [l, n, p[i]]));
+}
+function sides() {
+  const box = $('#sides'), parts = [['Left', 'left'], ['Center', 'center'], ['Right', 'right'], ['State-funded', 'state'], ['Not rated', 'unrated']]
+    .map(([label, k]) => [label, sum(`watched_${k}`, cur), `var(--${k})`]), total = parts.reduce((a, [, n]) => a + n, 0);
+  if (!total) return emptyNote(box, 'No clips watched in the last 7 days.');
+  const p = shares(parts.map(([, n]) => n)), split = el('div', null, 'split'), list = el('ul', null, 'sides');
+  split.setAttribute('role', 'img');
+  split.setAttribute('aria-label', parts.map(([label], i) => `${label} ${p[i]}%`).join(', '));
+  parts.forEach(([label, n, color], i) => {
+    if (n) { const seg = el('i'); seg.style.cssText = `flex: ${n} 1 0; background: ${color}`; split.append(seg); }
+    const li = el('li'), sw = el('i', null, 'sw'), v = el('span', null, 'v');
+    sw.style.background = color;
+    v.append(el('b', `${p[i]}%`), ` · ${fmt(n)}`);
+    li.append(sw, el('span', label), v);
+    list.append(li);
+  });
+  box.append(split, list);
+  const [, left] = parts[0], [, right] = parts[2];
+  if (left + right) {
+    const l = Math.round((left / (left + right)) * 100), after = el('p', null, 'after');
+    const word = Math.abs(l - 50) <= 3 ? 'about even' : l > 50 ? 'more Left than Right' : 'more Right than Left';
+    after.append('Between Left and Right: ', el('b', `${l}% / ${100 - l}%`), `, ${word}.`);
+    box.append(after);
   }
 }
-const refs = {};
-for (const [d, v] of Object.entries(byDay)) if (d > last30) for (const [k, n] of Object.entries(v)) if (k.startsWith('ref:')) refs[k.slice(4)] = (refs[k.slice(4)] || 0) + n;
-bars($('#refs'), Object.entries(refs).sort((a, b) => b[1] - a[1]).slice(0, 8), 'Nothing yet. Put ?ref=tiktok (or instagram, bluesky...) on the links you post to see which works.');
-bars($('#ages'), [['First day', 'age_0'], ['Day after', 'age_1'], ['2 to 7 days', 'age_2_7'], ['8 to 30 days', 'age_8_30'], ['31+ days', 'age_31_plus']]
-  .map(([l, k]) => [l, sum(k, last7)]), 'No visits yet.');
-const watched = sumWhere((k) => k.startsWith('watched_'), last7);
-bars($('#sides'), [['Left', 'left'], ['Center', 'center'], ['Right', 'right'], ['State-funded', 'state'], ['Not rated', 'unrated']]
-  .map(([l, k]) => { const n = sum(`watched_${k}`, last7); return [l, n, pct(n, watched)]; }), 'No clips watched yet.');
-const use = $('#use');
-const per = (n) => (visits ? (n / visits).toFixed(1) : '0');
-for (const [label, value] of [
-  ['Stories reached per visit', per(sum('story', last7))],
-  ['Clips watched per visit', per(watched)],
-  ['Videos on', pct(sum('mode_videos', last7), sum('mode_videos', last7) + sum('mode_text', last7))],
-  ['Opened Compare', fmt(sum('compare', last7))],
-  ['Opened Recap', fmt(sum('recap', last7))],
-  ['Searched', fmt(sum('search', last7))],
-  ['Went to a country', fmt(sum('world', last7))],
-]) { const tr = el('tr'); tr.append(el('td', label), el('td', value)); use.append(tr); }
-
-// ---- every number, as a table (the chart's text alternative)
-const names = [...new Set(rows.map((r) => r.name))].sort();
-const all = $('#all'), head = el('tr');
-head.append(el('th', 'Day'), ...names.map((n) => el('th', n)));
-all.append(head);
-for (const d of Object.keys(byDay).sort().reverse()) {
-  const tr = el('tr'); tr.append(el('td', d), ...names.map((n) => el('td', fmt(byDay[d][n] || 0)))); all.append(tr);
+function use() {
+  const box = $('#use'), visits = sum('visit', cur);
+  if (!visits) return emptyNote(box, 'No visits in the last 7 days.');
+  const duo = el('div', null, 'duo'), vids = sum('mode_videos', cur);
+  for (const [n, label] of [[pct(ratio(sum('homescreen', cur), visits)), 'via the Home Screen'], [pct(ratio(vids, vids + sum('mode_text', cur))), 'with videos on']]) {
+    const d = el('div'); d.append(el('b', n), el('span', label)); duo.append(d);
+  }
+  box.append(duo, el('h4', 'Times used'));
+  const items = [['Compare', 'compare'], ['Recap', 'recap'], ['Search', 'search'], ['World map', 'world']].map(([l, k]) => [l, sum(k, cur)]);
+  const max = Math.max(1, ...items.map(([, n]) => n)), rows = el('div', null, 'rows');
+  rows.style.marginTop = '0';
+  for (const [label, n] of items) {
+    const row = el('div'), head = el('div', null, 'r-top'), v = el('span', null, 'v'), bar = el('div', null, 'r-bar'), fill = el('i');
+    v.append(el('b', fmt(n)), ` · ${(n / visits).toFixed(2)} a visit`);
+    head.append(el('span', label), v);
+    fill.style.width = `${(n / max) * 100}%`;
+    bar.append(fill); row.append(head, bar); rows.append(row);
+  }
+  box.append(rows);
 }
 
-// ---- today's post: the biggest story of the last day that all three sides covered
-const feed = await (await fetch(`https://benjaminltakaki.github.io/certior-news/feed.json?t=${Date.now()}`)).json();
+// ---- every number: one row a day, grouped, the charts' table twin
+const GROUPS = [
+  ['Visits', [['visit', 'Visits']]],
+  ['Since first visit', [['age_0', 'First day'], ['age_1', 'Second day'], ['age_2_7', 'Days 3–8'], ['age_8_30', 'Days 9–31'], ['age_31_plus', 'After a month']]],
+  ['Opened from', [['homescreen', 'Home Screen'], ['browser', 'Browser']]],
+  ['Mode', [['mode_videos', 'Videos on'], ['mode_text', 'Text Only']]],
+  ['Stories', [['story', 'Opened'], ['story_sides', '2+ sides']]],
+  ['Clips by side', [['watched_left', 'Left'], ['watched_center', 'Center'], ['watched_right', 'Right'], ['watched_state', 'State-funded'], ['watched_unrated', 'Not rated']]],
+  ['Features', [['compare', 'Compare'], ['recap', 'Recap'], ['search', 'Search'], ['world', 'World map']]],
+  ['Sharing', [['share', 'Shares'], ['shared_open', 'Opens']]],
+];
+function table() {
+  const all60 = [daysBack(59), today], seen = new Set(Object.values(byDay).flatMap((v) => Object.keys(v)));
+  const refs = [...seen].filter((k) => k.startsWith('ref:')).sort((a, b) => sum(b, all60) - sum(a, all60));
+  const groups = [...GROUPS.map(([g, cols]) => [g, cols.filter(([k]) => seen.has(k))]), ['Came from', refs.map((k) => [k, site(k.slice(4))])]].filter(([, c]) => c.length);
+  const t = $('#all'), thead = el('thead'), g = el('tr', null, 'group'), h = el('tr'), tbody = el('tbody');
+  t.append(el('caption', 'Each day, newest first. Days run on UTC.'));
+  g.append(el('th', ''));
+  h.append(el('th', 'Day'));
+  for (const [name, cols] of groups) {
+    const th = el('th', name, 'gs'); th.colSpan = cols.length; th.scope = 'colgroup'; g.append(th);
+    cols.forEach(([k, label], i) => { const c = el('th', label, i ? '' : 'gs'); c.scope = 'col'; c.title = k; h.append(c); });
+  }
+  thead.append(g, h);
+  for (const d of Object.keys(byDay).sort().reverse()) {
+    const tr = el('tr'), th = el('th', `${short(d, { weekday: 'short' })}${d === today ? ' (so far)' : ''}`);
+    th.scope = 'row'; tr.append(th);
+    for (const [, cols] of groups) cols.forEach(([k], i) => tr.append(el('td', fmt(byDay[d][k] || 0), i ? '' : 'gs')));
+    tbody.append(tr);
+  }
+  if (!tbody.children.length) { const tr = el('tr'), td = el('td', 'No days yet.'); td.colSpan = 2; tr.append(td); tbody.append(tr); }
+  t.append(thead, tbody);
+}
+
+// ---- the line at the top: how the week went, and whether Reels bring people
+function verdict() {
+  const a = perDay(cur), b = perDay(prev);
+  if (!a) { $('#verdict').textContent = 'No visits in the last 7 days yet.'; return; }
+  let text = `${fmt(a)} visitors a day over the last 7 days`;
+  if (b) { const d = ((a - b) / b) * 100; text += Math.abs(d) < 5 ? ', about the same as the week before' : `, ${d > 0 ? 'up' : 'down'} ${Math.round(Math.abs(d))}% on the week before`; }
+  const full = [...Array(30).keys()].map((i) => daysBack(30 - i)).filter((d) => byDay[d]?.visit);
+  const reel = full.filter((d) => posted.has(d)), other = full.filter((d) => !posted.has(d));
+  const avg = (list) => list.reduce((t, d) => t + byDay[d].visit, 0) / list.length;
+  if (reel.length && other.length) text += `. Days a Reel went out averaged ${fmt(avg(reel))} visits; other days ${fmt(avg(other))}`;
+  $('#verdict').textContent = `${text}.`;
+}
+
+if (haveStats) {
+  posted = new Set((await firstStatus).postedDays || []);
+  $('#week-dates').textContent = `${span(cur)}, compared with ${span(prev)}`;
+  $('#key-prev').textContent = span(prev); $('#key-cur').textContent = span(cur);
+  $('#week-key').hidden = !daysIn(prev);
+  tiles(); drawDaily(); sources(); ages(); sides(); use(); table(); verdict();
+}
+
+// ---- posting: the biggest stories of the last day that all three sides covered
 const outlets = (s) => new Set(s.clips.map((c) => c.channel)).size;
 const SIDES = [['left', 'Left'], ['center', 'Center'], ['right', 'Right']];
-const picks = feed.stories
-  .filter((s) => Date.now() - Date.parse(s.first || s.updated) < 864e5 && SIDES.every(([k]) => s.clips.some((c) => c.column === k)))
+const feed = await feedP;
+const picks = (feed?.stories || [])
+  .filter((s) => Date.now() - Date.parse(s.first || s.updated) < DAY && SIDES.every(([k]) => s.clips.some((c) => c.column === k)))
   .sort((a, b) => outlets(b) - outlets(a)).slice(0, 5);
+if (feed?.generated) $('#fresh').textContent += ` Feed updated ${clock(feed.generated)} UTC.`;
 const pick = $('#pick');
 pick.append(...picks.map((s, i) => { const o = el('option', `${s.headline} (${outlets(s)} outlets)`); o.value = i; return o; }));
+const chosen = () => picks[+pick.value || 0];
+if (!picks.length) {
+  $('.pick-wrap').hidden = true;
+  $('#pick-note').textContent = feed ? 'No story from the last day was covered by all three sides yet, so there’s nothing to post.' : 'Couldn’t load today’s stories from the feed.';
+  for (const c of document.querySelectorAll('.post-card')) c.hidden = true;
+}
 async function showPost() {
-  const s = picks[+pick.value || 0];
-  if (!s) { $('#caption').value = $('#reel-note').textContent = 'No story from the last day was covered by all three sides yet.'; return; }
-  showReel(s);
+  const s = chosen();
+  if (!s) return;
+  showReel(s); showCaption(s);
   const first = SIDES.map(([k, label]) => [label, s.clips.find((c) => c.column === k)]);
   const url = `${location.origin}/certior/?story=${encodeURIComponent(s.id)}&clip=${encodeURIComponent(first[1][1].id)}&ref=social`;
-  const blob = await storyCard(s, first[1][1].id);
-  const src = URL.createObjectURL(blob);
-  $('#card').src = src; $('#download').href = src;
   $('#caption').value = [`Same story, three sides. ${outlets(s)} outlets covered it:`, '',
     ...first.map(([label, c]) => `${label} (${c.channel}): ${c.title}`), '', `Swipe through every outlet's take: ${url}`].join('\n');
+  if (!CSS.supports('field-sizing', 'content')) { const t = $('#caption'); t.style.height = 'auto'; t.style.height = `${t.scrollHeight + 2}px`; }
+  try {
+    const { storyCard } = await import('/certior/card.js');
+    const src = URL.createObjectURL(await storyCard(s, first[1][1].id));
+    $('#card').src = src;
+    Object.assign($('#download'), { href: src, download: `certior-${today}.png` });
+  } catch {
+    $('#card').alt = 'The card couldn’t be drawn here.';
+  }
 }
 pick.onchange = showPost;
-$('#copy').onclick = async () => { await navigator.clipboard.writeText($('#caption').value); $('#copy').textContent = 'Copied'; };
-showPost();
+$('#copy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('#caption').value); $('#copy-status').textContent = 'Copied.'; }
+  catch { $('#copy-status').textContent = 'Couldn’t copy: select the text and copy it yourself.'; }
+  setTimeout(() => { $('#copy-status').textContent = ''; }, 2500);
+};
 
-// ---- Instagram: posts only when you press the button. The Reel of the story picked above, made by the server (the
-// same file the button posts), what went out, and the post being made, followed until it's done.
-// The server makes the Reel once (a minute or so on Render); the page asks until it's ready, then shows the file.
+// the exact caption the Reel goes out with, from the server that posts it
+async function showCaption(s) {
+  $('#ig-caption').textContent = '…';
+  const j = await fetch(`/api/certior/caption/${encodeURIComponent(s.id)}`).then((r) => r.json()).catch(() => null);
+  if (s === chosen()) $('#ig-caption').textContent = j?.caption || `Couldn’t load the caption${j?.error ? `: ${j.error}` : ''}.`;
+}
+// the Reel, made once by the server (a minute or so on Render); the page asks until it's ready, then shows the file
 async function showReel(s) {
   const src = `/api/certior/reel/${encodeURIComponent(s.id)}`, video = $('#reel');
   video.removeAttribute('src'); video.removeAttribute('poster'); video.load();
   $('#reel-download').removeAttribute('href');
-  $('#reel-note').textContent = 'Making the Reel\u2026 the first time can take a minute.';
+  $('#reel-note').textContent = 'Making the Reel… the first time can take a minute.';
   for (;;) {
     const r = await fetch(`${src}?ready`).catch(() => null), j = r && await r.json().catch(() => null);
-    if (s !== picks[+pick.value || 0]) return;      // another story was picked meanwhile
+    if (s !== chosen()) return;      // another story was picked meanwhile
     if (j?.ready) break;
-    if (!j || j.error) { $('#reel-note').textContent = `Couldn\u2019t make the Reel: ${j?.error || (r ? `the server answered ${r.status}` : 'no answer from the server')}.`; return; }
+    if (!j || j.error) { $('#reel-note').textContent = `Couldn’t make the Reel: ${j?.error || (r ? `the server answered ${r.status}` : 'no answer from the server')}.`; return; }
   }
   Object.assign(video, { poster: `${src}?cover`, src });
   Object.assign($('#reel-download'), { href: src, download: `certior-${today}.mp4` });
-  $('#reel-note').textContent = 'What the button posts, with the caption and hashtags.';
+  $('#reel-note').textContent = '';
 }
-$('#reel').onerror = () => { if ($('#reel').getAttribute('src')) $('#reel-note').textContent = 'This browser can\u2019t play it here; Download Reel still works.'; };
-const jobText = (j) => j.running ? `${j.step}\u2026` : j.posted ? `Posted: ${j.posted}` : j.skipped ? `Not posted: ${j.skipped}` : `Failed: ${j.error}`;
-async function showInstagram() {
-  const r = await fetch('/api/certior/instagram-status').catch(() => null);
-  if (!r?.ok) { $('#ig-note').textContent = `Couldn\u2019t load the Instagram status${r ? ` (${r.status})` : ''}.`; return; }
-  const { setUp, recent, job } = await r.json();
-  $('#ig-note').textContent = setUp
-    ? 'Nothing posts by itself. The button posts this Reel with its caption and hashtags: at most once a day, and only a story from the last day that all three sides covered.'
-    : 'Not set up: add IG_ACCESS_TOKEN on Render to start posting.';
+$('#reel').onerror = () => { if ($('#reel').getAttribute('src')) $('#reel-note').textContent = 'This browser can’t play the Reel here; Download Reel still works.'; };
+showPost();
+
+// ---- Instagram: what went out, and the post being made, followed until it's done
+const jobText = (j) => j.running ? `${j.step}…` : j.posted ? `Posted: ${j.posted}` : j.skipped ? `Not posted: ${j.skipped}` : `Failed: ${j.error}`;
+async function showInstagram(pending) {
+  const st = await (pending || getStatus());
+  const pill = $('#today-pill');
+  if (!st.recent) {
+    $('#ig-note').textContent = `Couldn’t load the Instagram status${st.status ? ` (the server answered ${st.status})` : ''}.`;
+    pill.textContent = 'Today’s Reel: status unknown';
+    return;
+  }
+  const { setUp, recent, job } = st, doneToday = recent.some((x) => x.day === today && x.media_id);
+  pill.textContent = !setUp ? 'Instagram isn’t set up' : doneToday ? 'Today’s Reel: posted ✓' : job?.running ? 'Today’s Reel: posting…' : 'Today’s Reel: not posted yet · Post it';
+  pill.classList.toggle('done', doneToday);
+  if (!setUp) $('#ig-note').textContent = 'Not set up: add IG_ACCESS_TOKEN on Render to start posting.';
   const t = $('#ig-recent'); t.textContent = '';
-  for (const x of recent) { const tr = el('tr'); tr.append(el('td', x.day), el('td', x.headline), el('td', x.media_id ? 'Posted' : x.stale ? 'Didn\u2019t finish' : 'Posting')); t.append(tr); }
-  if (!recent.length && setUp) { const tr = el('tr'); tr.append(el('td', 'Nothing posted yet.')); t.append(tr); }
+  if (recent.length) {
+    const tr = el('tr'); tr.append(el('th', 'Day'), el('th', 'Story'), el('th', 'Visits that day'), el('th', 'Status')); t.append(tr);
+    for (const x of recent) {
+      const r = el('tr'), v = byDay[x.day]?.visit;
+      r.append(el('td', short(x.day)), el('td', x.headline), el('td', v == null ? '—' : `${fmt(v)}${x.day === today ? ' so far' : ''}`), el('td', x.media_id ? 'Posted' : x.stale ? 'Didn’t finish' : 'Posting'));
+      t.append(r);
+    }
+  } else { const r = el('tr'), td = el('td', setUp ? 'Nothing posted yet.' : 'Nothing posted.'); td.colSpan = 4; r.append(td); t.append(r); }
   if (job) $('#ig-result').textContent = jobText(job);
-  $('#ig-run').disabled = !setUp || !picks.length || !!job?.running || recent.some((x) => x.day === today && x.media_id);
-  if (job?.running) setTimeout(showInstagram, 3000);
+  const why = !setUp ? 'Instagram isn’t set up.' : doneToday ? 'Already posted today.' : job?.running ? '' : !picks.length ? 'No story qualifies yet.' : '';
+  $('#ig-run').disabled = !!why || !!job?.running;
+  $('#ig-why').textContent = why;
+  const now = new Set(st.postedDays || []);
+  if (haveStats && [...now].join() !== [...posted].join()) { posted = now; drawDaily(); verdict(); }      // a Reel just went out
+  if (job?.running) setTimeout(() => showInstagram(), 3000);
 }
 $('#ig-run').onclick = async () => {
-  const s = picks[+pick.value || 0];
-  $('#ig-run').disabled = true; $('#ig-result').textContent = 'Starting\u2026';
+  const s = chosen();
+  if (!s || !confirm(`Post the Reel of “${s.headline}” to Instagram now, with the caption shown?`)) return;
+  $('#ig-run').disabled = true; $('#ig-result').textContent = 'Starting…';
   try {
     const r = await fetch('/api/certior/instagram-run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ story: s.id }) });
     if (!r.ok) throw new Error(`the server answered ${r.status}`);
@@ -310,7 +793,7 @@ $('#ig-run').onclick = async () => {
   }
   showInstagram();
 };
-showInstagram();
+showInstagram(firstStatus);
 </script>
 </body>
 </html>
