@@ -125,10 +125,13 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
     return saved.value;
   }
 
+  let feed = null; // { at, stories }: kept for a minute, as the stats page asks every few seconds while a Reel is made
   async function stories() {
+    if (feed && now() - feed.at < 60e3) return feed.stories;
     const res = await fetchFn(`${FEED}?t=${now()}`);
     if (!res.ok) throw new Error(`feed ${res.status}`);
-    return (await res.json()).stories;
+    feed = { at: now(), stories: (await res.json()).stories };
+    return feed.stories;
   }
 
   // A story's Reel, made once for the clips it shows (a story gains and swaps clips during the day, and the caption is
@@ -141,7 +144,13 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
     const key = `${today()}:${story.id}:${shown.map((c) => c?.id).join(",")}`;
     for (const k of reels.keys()) if (!k.startsWith(today())) reels.delete(k);
     if (!reels.has(key)) {
-      const made = making.then(() => render(story, new Date(now())));
+      const made = making.then(async () => {
+        const t0 = Date.now();
+        log.log(`[certior] making the Reel for ${story.id}`);
+        const files = await render(story, new Date(now()));
+        log.log(`[certior] Reel for ${story.id} made in ${((Date.now() - t0) / 1000).toFixed(1)} s${files.peakMB ? `, the server at ${files.peakMB} MB at most` : ""}`);
+        return files;
+      });
       making = made.catch(() => {});
       reels.set(key, made.catch((err) => { reels.delete(key); throw err; }));
     }

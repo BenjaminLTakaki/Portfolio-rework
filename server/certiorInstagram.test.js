@@ -167,12 +167,14 @@ test("a story's Reel is made once: the preview and the post share it", async () 
 
 test("a story whose clips changed gets a new Reel, so the video always matches the caption", async () => {
   rendered.length = 0;
-  let stories = [threeSides("big", 2, 3)];
+  let stories = [threeSides("big", 2, 3)], t = NOW;
   const ig = fakeInstagram(), p = poster(memoryStore(), ig, {
+    now: () => t,
     fetchFn: async (url, init) => (new URL(url).hostname.startsWith("graph.") ? ig.fetchFn(url, init) : { ok: true, json: async () => ({ stories }) }),
   });
   await p.preview("big");
   stories = [{ ...stories[0], clips: [clip("bigL2", "left"), ...stories[0].clips] }];      // a new Left clip comes first
+  t += 61e3;      // the feed is kept for a minute
   await p.preview("big");
   await p.preview("big");
   assert.deepEqual(rendered, ["big", "big"], "made again once, for the new clips only");

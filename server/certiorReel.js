@@ -179,18 +179,21 @@ export async function renderReel(story, { now = new Date(), out = path.join(os.t
   const cover = out.replace(/\.mp4$/i, "") + "-cover.jpg";
   draw(CMP + 0.45);
   await fs.writeFile(cover, await canvas.encode("jpeg", 92));
+  let peak = process.memoryUsage().rss;
+  const sampler = setInterval(() => { peak = Math.max(peak, process.memoryUsage().rss); }, 250);
   const wav = out.replace(/\.mp4$/i, "") + ".wav";
   await fs.writeFile(wav, soundtrack([{ t: MOVE, type: "swipe" }, ...E.map((t, i) => ({ t, type: "arc", i })), { t: ASK_AT, type: "tap" },
     { t: END + 0.2, type: "end" }, ...[0, 1, 2].map((i) => ({ t: END + 0.35 + i * 0.15, type: "arc", i }))], DUR, END));      // in time with the end card's arcs
 
-  // One thread and a short queue: ffmpeg otherwise starts a thread, with its frames, per CPU it sees, and a small
-  // server reports its host's many CPUs (the first version, with the end card decoded alongside, used ~600 MB).
+  // One thread, a short queue, and no look-ahead or B-frames: ffmpeg otherwise holds dozens of frames, and starts a
+  // thread with its own per CPU it sees (a small server reports its host's many). About 80 MB, against ~600 MB for the
+  // first version; the file comes out bigger, which doesn't matter, Instagram re-encodes it.
   let errors = "";
   const enc = spawn(ffmpeg, ["-v", "error", "-y", "-filter_threads", "1",
     "-thread_queue_size", "2", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", `${W}x${H}`, "-r", String(FPS), "-i", "-", "-i", wav,
     "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p",      // standard HD colour
     "-c:v", "libx264", "-pix_fmt", "yuv420p", "-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
-    "-preset", "veryfast", "-tune", "animation", "-crf", "18", "-threads", "1",
+    "-preset", "veryfast", "-crf", "18", "-threads", "1", "-x264-params", "rc-lookahead=0:bframes=0:ref=1:sync-lookahead=0",
     "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-shortest", "-movflags", "+faststart", out], { stdio: ["pipe", "ignore", "pipe"] });
   enc.stderr.on("data", (d) => { errors += d; });
   enc.stdin.on("error", () => {});      // a broken pipe: reported by the write below and ffmpeg's exit
@@ -212,6 +215,6 @@ export async function renderReel(story, { now = new Date(), out = path.join(os.t
   } catch (err) {
     enc.kill();      // ffmpeg stopped reading: its own error says why
   }
-  try { await done; } finally { await fs.rm(wav, { force: true }); }
-  return { mp4: out, cover, duration: DUR };
+  try { await done; } finally { clearInterval(sampler); await fs.rm(wav, { force: true }); }
+  return { mp4: out, cover, duration: DUR, peakMB: Math.round(peak / 2 ** 20) };
 }

@@ -111,9 +111,12 @@ const instagram = makeInstagramPoster({
 app.get("/api/certior/instagram/:file", instagram.media);
 app.get("/api/certior/instagram-status", statsGate, async (_req, res) => {
   try {
+    const stored = await igStore.token(), systemUser = /^EAA/.test(process.env.IG_ACCESS_TOKEN || "");
     res.json({
-      setUp: !!(process.env.IG_ACCESS_TOKEN || (await igStore.token())), recent: await igStore.recent(7),
+      setUp: !!(process.env.IG_ACCESS_TOKEN || stored), recent: await igStore.recent(7),
       postedDays: await igStore.postedDays(30), job: instagram.job(),
+      // a system user's token never expires; an Instagram Login one is refreshed weekly, and a failed refresh shows here
+      token: systemUser ? { kind: "system" } : stored ? { kind: "instagram", refreshed: new Date(stored.at).toISOString() } : null,
     });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
