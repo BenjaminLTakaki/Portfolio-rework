@@ -126,12 +126,19 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
     return saved.value;
   }
 
-  let feed = null; // { at, stories }: kept for a minute, as the stats page asks every few seconds while a Reel is made
+  // { at, stories }: kept for a minute, as the stats page asks every few seconds while a Reel is made, and kept on if
+  // fetching it again fails, so one failed fetch can't stop a Reel that's being made
+  let feed = null;
   async function stories() {
     if (feed && now() - feed.at < 60e3) return feed.stories;
-    const res = await fetchFn(`${FEED}?t=${now()}`);
-    if (!res.ok) throw new Error(`feed ${res.status}`);
-    feed = { at: now(), stories: (await res.json()).stories };
+    try {
+      const res = await fetchFn(`${FEED}?t=${now()}`);
+      if (!res.ok) throw new Error(`feed ${res.status}`);
+      feed = { at: now(), stories: (await res.json()).stories };
+    } catch (err) {
+      if (!feed) throw err;
+      log.error(`[certior] the feed didn't load (${err.message}), using the one from ${new Date(feed.at).toISOString()}`);
+    }
     return feed.stories;
   }
 

@@ -4,11 +4,18 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { Worker } from "node:worker_threads";
 
 import ffmpeg from "ffmpeg-static";
 
-import { renderReel } from "./certiorReel.js";
 import { findPlace } from "./certiorReelMap.js";
+
+// as the server makes a Reel: in a worker thread
+const renderReel = (story, { now = new Date(), out }) => new Promise((ok, fail) => {
+  const w = new Worker(new URL("./certiorReel.js", import.meta.url), { workerData: { certiorReel: { story, now: now.toISOString(), out } } });
+  w.once("message", ok);
+  w.once("error", fail);
+});
 
 const clip = (column, channel, title, extra = {}) => ({ id: `${channel}1`, column, channel, title, ...extra });
 const STORY = {

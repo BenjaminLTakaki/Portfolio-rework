@@ -16,6 +16,7 @@ import "dotenv/config";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
 
 import express from "express";
 import cron from "node-cron";
@@ -103,7 +104,13 @@ app.get("/certior-stats", statsGate, (_req, res) => res.sendFile(path.join(__dir
 const igStore = sqlStore(sql);
 const instagram = makeInstagramPoster({
   store: igStore,
-  render: async (story, now) => (await import("./certiorReel.js")).renderReel(story, { now }),      // loads the canvas and ffmpeg only when needed
+  // in a worker thread: drawing a Reel takes minutes of CPU here, and this thread has to keep answering meanwhile
+  render: (story, now) => new Promise((ok, fail) => {
+    const w = new Worker(new URL("./certiorReel.js", import.meta.url), { workerData: { certiorReel: { story, now: now.toISOString() } } });
+    w.once("message", ok);
+    w.once("error", fail);
+    w.once("exit", (code) => fail(new Error(`the Reel's worker stopped (${code})`)));      // after a message: no effect
+  }),
   envToken: process.env.IG_ACCESS_TOKEN,
   igUserId: process.env.IG_USER_ID,
   publicBase: "https://www.benjamintakaki.com",

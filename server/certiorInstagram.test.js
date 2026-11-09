@@ -181,3 +181,18 @@ test("a story whose clips changed gets a new Reel, so the video always matches t
   await p.preview("big");
   assert.deepEqual(rendered, ["big", "big"], "made again once, for the new clips only");
 });
+
+test("a feed that fails to load again keeps the last one, so a Reel being made isn't given up on", async () => {
+  let down = false, t = NOW;
+  const ig = fakeInstagram(), p = poster(memoryStore(), ig, {
+    now: () => t,
+    fetchFn: async (url, init) => {
+      if (!new URL(url).hostname.startsWith("graph.") && down) throw new TypeError("fetch failed");
+      return ig.fetchFn(url, init);
+    },
+  });
+  await p.preview("big");
+  down = true; t += 61e3;      // past the minute the feed is kept for, and GitHub doesn't answer
+  assert.deepEqual(await p.preview("big"), { mp4: "/tmp/big.mp4", cover: "/tmp/big-cover.jpg" });
+  await assert.rejects(poster(memoryStore(), ig, { fetchFn: async () => { throw new TypeError("fetch failed"); } }).preview("big"), /fetch failed/);      // never loaded: says so
+});

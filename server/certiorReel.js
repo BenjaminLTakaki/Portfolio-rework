@@ -16,6 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import v8 from "node:v8";
 import vm from "node:vm";
+import { isMainThread, parentPort, workerData } from "node:worker_threads";
 
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import ffmpeg from "ffmpeg-static";
@@ -483,4 +484,12 @@ export async function renderReel(story, { now = new Date(), out = path.join(os.t
   }
   try { await done; } finally { clearInterval(sampler); await fs.rm(wav, { force: true }); }
   return { mp4: out, cover, duration: T_END, place: place?.label ?? null, peakMB: Math.round(peak / 2 ** 20) };
+}
+
+// Run as a worker thread (server/index.js starts one per Reel): the frames are drawn away from the server's own
+// thread, which goes on answering the stats page, the app and Render's health checks meanwhile. Drawn on the server's
+// thread, a Reel's minutes of CPU on Render left a feed request no time to connect ("fetch failed").
+if (!isMainThread && workerData?.certiorReel) {
+  const { story, now, out } = workerData.certiorReel;
+  parentPort.postMessage(await renderReel(story, { now: new Date(now), ...(out && { out }) }));
 }
