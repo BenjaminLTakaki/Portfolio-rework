@@ -31,16 +31,15 @@ test("the caption names each side's outlet and headline, and points to the bio",
 });
 
 function memoryStore(token) {
-  const days = new Map();
+  const posts = new Map();      // "day:story id" -> { s, mediaId, permalink }
   return {
-    days, saved: token ? { value: token.value, at: token.at } : null,
+    posts, saved: token ? { value: token.value, at: token.at } : null,
     async token() { return this.saved; },
     async saveToken(value) { this.saved = { value, at: NOW }; },
-    async claim(day, s) { if (days.has(day)) return false; days.set(day, { s, mediaId: null }); return true; },
-    async posted(day, mediaId, permalink) { Object.assign(days.get(day), { mediaId, permalink }); },
-    async release(day) { if (days.get(day)?.mediaId == null) days.delete(day); },
-    async hasDay(day) { return days.has(day); },
-    async recentClipIds() { return new Set([...days.values()].flatMap((d) => d.s.clips.map((c) => c.id))); },
+    async claim(day, s) { const k = `${day}:${s.id}`; if (posts.has(k)) return false; posts.set(k, { s, mediaId: null }); return true; },
+    async posted(day, id, mediaId, permalink) { Object.assign(posts.get(`${day}:${id}`), { mediaId, permalink }); },
+    async release(day, id) { if (posts.get(`${day}:${id}`)?.mediaId == null) posts.delete(`${day}:${id}`); },
+    async recentClipIds() { return new Set([...posts.values()].filter((p) => p.mediaId).flatMap((p) => p.s.clips.map((c) => c.id))); },
   };
 }
 
@@ -56,7 +55,7 @@ function fakeInstagram({ statuses = ["IN_PROGRESS", "FINISHED"], fail } = {}) {
     if (u.pathname === "/refresh_access_token") return json({ access_token: "fresh-token" });
     if (u.pathname === "/me") return json({ user_id: "17841" });
     if (u.pathname === "/17841/media") return json({ id: "container1" });
-    if (u.pathname === "/container1") return json({ status_code: statuses.shift() });
+    if (u.pathname === "/container1") return json({ status_code: statuses.shift() ?? "FINISHED" });
     if (u.pathname === "/17841/media_publish") return json({ id: "media99" });
     if (u.pathname === "/media99") return json({ permalink: "https://www.instagram.com/reel/abc/" });
     throw new Error(`unexpected ${u.pathname}`);
@@ -76,29 +75,31 @@ const served = (p, file) => {
   return out;
 };
 
-test("posts the day's Reel once: video and cover served for Instagram, caption, publish, recorded", async () => {
+test("posts a Reel: video and cover served for Instagram, caption, publish, recorded; any number a day, each story once", async () => {
   const store = memoryStore(), ig = fakeInstagram(), p = poster(store, ig);
   const result = await p.run();
   assert.deepEqual(result, { posted: "Story big", mediaId: "media99" });
   const create = ig.calls.find(([, path]) => path === "/17841/media")[2];
   assert.equal(create.media_type, "REELS");
-  assert.equal(create.video_url, "https://www.example.com/api/certior/instagram/2026-11-08.mp4");
-  assert.equal(create.cover_url, "https://www.example.com/api/certior/instagram/2026-11-08.jpg");
+  assert.equal(create.video_url, "https://www.example.com/api/certior/instagram/2026-11-08-big.mp4");
+  assert.equal(create.cover_url, "https://www.example.com/api/certior/instagram/2026-11-08-big.jpg");
   assert.match(create.caption, /^Same story, three sides\. 6 outlets/);
   assert.equal(create.access_token, "env-token");
-  assert.equal(served(p, "2026-11-08.mp4"), "/tmp/big.mp4");
-  assert.equal(served(p, "2026-11-08.jpg"), "/tmp/big-cover.jpg");
-  assert.equal(served(p, "2026-11-07.mp4"), 404, "only the post being made");
-  assert.equal(store.days.get("2026-11-08").mediaId, "media99");
-  assert.equal(store.days.get("2026-11-08").permalink, "https://www.instagram.com/reel/abc/", "kept, so the stats page can link the post");
-  assert.deepEqual(await p.run(), { skipped: "already posted today" });
-  assert.equal(ig.calls.filter(([, path]) => path === "/17841/media_publish").length, 1, "never twice a day");
+  assert.equal(served(p, "2026-11-08-big.mp4"), "/tmp/big.mp4");
+  assert.equal(served(p, "2026-11-08-big.jpg"), "/tmp/big-cover.jpg");
+  assert.equal(served(p, "2026-11-07-big.mp4"), 404, "only the post being made");
+  assert.equal(store.posts.get("2026-11-08:big").mediaId, "media99");
+  assert.equal(store.posts.get("2026-11-08:big").permalink, "https://www.instagram.com/reel/abc/", "kept, so the stats page can link the post");
+  assert.deepEqual(await p.run(), { posted: "Story small", mediaId: "media99" }, "a second post the same day: the next story");
+  assert.equal(served(p, "2026-11-08-big.mp4"), 404, "each post at its own address");
+  assert.match((await p.run("big")).skipped, /shares a clip/, "never the same story twice");
+  assert.equal(ig.calls.filter(([, path]) => path === "/17841/media_publish").length, 2);
 });
 
 test("a failed post is given back, so the next scheduled try can post", async () => {
   const store = memoryStore(), p = poster(store, fakeInstagram({ fail: "/media_publish" }));
   await assert.rejects(p.run(), /Instagram \/17841\/media_publish: nope/);
-  assert.equal(store.days.has("2026-11-08"), false);
+  assert.equal(store.posts.size, 0);
   await assert.rejects(poster(store, fakeInstagram({ statuses: ["ERROR"] })).run(), /didn't accept the video/);
   assert.deepEqual(await poster(store, fakeInstagram()).run(), { posted: "Story big", mediaId: "media99" });
 });
@@ -129,7 +130,7 @@ test("posts the story picked on the stats page, but never one that breaks the ru
   const p = poster(memoryStore(), fakeInstagram());
   assert.deepEqual(await p.run("small"), { posted: "Story small", mediaId: "media99" });
   const store = memoryStore();
-  store.days.set("2026-11-05", { s: threeSides("small", 1), mediaId: "old" });      // its clips went out this week
+  store.posts.set("2026-11-05:small", { s: threeSides("small", 1), mediaId: "old" });      // its clips went out this week
   assert.match((await poster(store, fakeInstagram()).run("small")).skipped, /shares a clip/);
   assert.match((await poster(memoryStore(), fakeInstagram()).run("gone")).skipped, /isn't in the feed/);
 });

@@ -183,7 +183,7 @@
   .btn:not([href]) { opacity: 0.45; pointer-events: none; }
   .status { margin: 10px 0 0; font-size: 14px; }
   .why { font-size: 13.5px; color: var(--muted); }
-  #ig-recent td:nth-child(2), #ig-recent th:nth-child(2) { white-space: normal; text-align: left; }
+  #ig-recent .story, #ig-recent th:nth-child(2) { white-space: normal; text-align: left; }
   #ig-recent td:first-child, #ig-recent th:first-child { text-align: left; }
   #ig-recent { margin-top: 8px; }
   #ig-recent a { color: var(--ink); text-decoration-color: var(--muted); text-underline-offset: 2px; }
@@ -298,7 +298,7 @@
         </figure>
         <div>
           <h3 id="ig-title">Post to Instagram</h3>
-          <p class="note" id="ig-note">Posts only when you press the button: at most once a day, and only a story from the last day that all three sides covered.</p>
+          <p class="note" id="ig-note">Posts only when you press the button, as many a day as you like: a story from the last day that all three sides covered, and never one already posted.</p>
           <p class="note" id="ig-token"></p>
           <div id="ig-post">
             <span class="label" style="margin-top: 16px">Caption on Instagram <span>· written by the server, exactly what goes out</span></span>
@@ -808,9 +808,9 @@ const chosen = () => picks[+pick.value || 0];
 // Post waits until the Reel, its caption and Instagram's status are all in
 const ready = { reel: false, reelError: '', caption: false, captionError: '', status: null };
 function updateButton() {
-  const st = ready.status, doneToday = st?.recent?.some((x) => x.day === today && x.media_id);
+  const st = ready.status, done = st?.recent?.some((x) => x.story_id === chosen()?.id && x.media_id);
   const why = !picks.length ? 'No story qualifies yet.' : !st ? 'Checking Instagram…' : !st.recent ? 'Instagram’s status didn’t load: try Refresh.'
-    : !st.setUp ? 'Instagram isn’t set up.' : doneToday ? 'Already posted today.' : st.job?.running ? ''
+    : !st.setUp ? 'Instagram isn’t set up.' : done ? 'Already posted.' : st.job?.running ? ''
     : !ready.reel ? ready.reelError || 'Waiting for the Reel…' : !ready.caption ? ready.captionError || 'Waiting for the caption…' : '';
   $('#ig-run').setAttribute('aria-disabled', String(!!why || !!st?.job?.running));      // still focusable, so its reason can be heard
   $('#ig-why').textContent = why;
@@ -898,9 +898,10 @@ async function showInstagram(pending) {
     updateButton();
     return;
   }
-  const { setUp, recent, job, token } = st, doneToday = recent.some((x) => x.day === today && x.media_id);
-  pill.lastChild.textContent = !setUp ? 'Instagram isn’t set up' : doneToday ? 'Today’s Reel: posted ✓' : job?.running ? 'Today’s Reel: posting…' : 'Today’s Reel: not posted yet';
-  pill.classList.toggle('done', doneToday || !setUp);
+  const { setUp, recent, job, token } = st, postedToday = recent.filter((x) => x.day === today && x.media_id).length;
+  pill.lastChild.textContent = !setUp ? 'Instagram isn’t set up' : job?.running ? 'Today’s Reel: posting…'
+    : postedToday ? `Posted today: ${many(postedToday, 'Reel')} ✓` : 'Today’s Reel: not posted yet';
+  pill.classList.toggle('done', postedToday > 0 || !setUp);
   if (!setUp) $('#ig-note').textContent = 'Not set up: add IG_ACCESS_TOKEN on Render to start posting.';
   const stale = token?.refreshed && Date.now() - Date.parse(token.refreshed) > 9 * DAY;
   $('#ig-token').textContent = token?.kind === 'system' ? 'Token: a system user’s, which doesn’t expire.'
@@ -908,17 +909,22 @@ async function showInstagram(pending) {
   const t = $('#ig-recent'); t.textContent = '';
   if (recent.length) {
     const tr = el('tr'); tr.append(el('th', 'Day'), el('th', 'Story'), el('th', 'Visits'), el('th', 'From IG'), el('th', 'Status')); t.append(tr);
-    for (const x of recent) {
+    for (const [i, x] of recent.entries()) {
       const r = el('tr'), v = byDay[x.day]?.visit, ig = bySite([x.day, x.day]).Instagram || 0, sofar = x.day === today ? ' so far' : '';
-      const story = el('td');
+      const story = el('td', null, 'story');
       if (x.permalink) {
         const a = Object.assign(el('a', x.headline), { href: x.permalink, target: '_blank', rel: 'noopener' }), mark = el('span', ' ↗');
         mark.setAttribute('aria-hidden', 'true');
         a.append(mark, el('span', ' (opens Instagram)', 'sr'));
         story.append(a);
       } else story.textContent = x.headline;
-      r.append(el('td', short(x.day)), story, el('td', v == null ? '—' : `${fmt(v)}${sofar}`), el('td', v == null ? '—' : fmt(ig)),
-        el('td', x.media_id ? 'Posted' : x.stale ? 'Didn’t finish' : 'Posting'));
+      const status = el('td', x.media_id ? 'Posted' : x.stale ? 'Didn’t finish' : 'Posting');
+      if (recent[i - 1]?.day === x.day) r.append(story, status);      // a day's posts share its cells: its visits aren't any one post's
+      else {
+        const rowSpan = recent.filter((y) => y.day === x.day).length;
+        const [day, visits, fromIg] = [short(x.day), v == null ? '—' : `${fmt(v)}${sofar}`, v == null ? '—' : fmt(ig)].map((s) => Object.assign(el('td', s), { rowSpan }));
+        r.append(day, story, visits, fromIg, status);
+      }
       t.append(r);
     }
   } else { const r = el('tr'), td = el('td', setUp ? 'Nothing posted yet.' : 'Nothing posted.'); td.colSpan = 5; r.append(td); t.append(r); }

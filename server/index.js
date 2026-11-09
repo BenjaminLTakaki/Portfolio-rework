@@ -98,9 +98,10 @@ app.get("/api/swipe-news/stats", statsGate, async (_req, res) => {
 });
 app.get("/certior-stats", statsGate, (_req, res) => res.sendFile(path.join(__dirname, "swipe-news-stats.html")));
 
-// The day's story as a Reel, posted to Instagram only when you press the button on /certior-stats (token in
-// IG_ACCESS_TOKEN; without it this does nothing). It posts at most once a day.
-// ponytail: no schedule, by choice; to go back to automatic, cron.schedule("0 18-21 * * *", () => instagram.run(), ...)
+// A story as a Reel, posted to Instagram only when you press the button on /certior-stats (token in IG_ACCESS_TOKEN;
+// without it this does nothing), as many a day as you like.
+// ponytail: no schedule, by choice; to go back to automatic, cron.schedule("0 18 * * *", () => instagram.run(), ...),
+// once a day: run() has no daily cap any more
 const igStore = sqlStore(sql);
 const instagram = makeInstagramPoster({
   store: igStore,

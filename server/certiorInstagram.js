@@ -1,11 +1,10 @@
-// Posts the day's Certior story to Instagram as a Reel (certiorReel.js), for free, through Instagram's own API
-// (publishing to your own professional account), when you press the button on /certior-stats. The guardrails:
+// Posts Certior stories to Instagram as Reels (certiorReel.js), for free, through Instagram's own API (publishing to
+// your own professional account), when you press the button on /certior-stats, as often as you like. The guardrails:
 //   - only a story from the last 24 hours that Left, Center and Right all covered (the stats page offers the ones
 //     with the most outlets; without a choice, the most outlets wins),
-//   - never a story that shares a clip with one posted in the last week,
-//   - at most one post a day.
+//   - never a story that shares a clip with one posted in the last week, so never the same story twice.
 // Instagram fetches the video and its cover from a public URL: the server serves the files it just made at
-// /api/certior/instagram/<day>.mp4 and .jpg while that post is made. Two kinds of token work:
+// /api/certior/instagram/<day>-<story id>.mp4 and .jpg while that post is made. Two kinds of token work:
 //   - IGAA... (Instagram Login): lasts 60 days, refreshed weekly and kept in the database; graph.instagram.com.
 //   - EAA... (a system user's token, from Business settings; new Meta apps only get this kind): never expires, so it is
 //     used straight from IG_ACCESS_TOKEN; graph.facebook.com, with the Instagram account's ID in IG_USER_ID.
@@ -47,9 +46,13 @@ export function sqlStore(sql) {
     async ensure() {
       await sql`CREATE TABLE IF NOT EXISTS certior_settings (key text PRIMARY KEY, value text NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())`;
       await sql`CREATE TABLE IF NOT EXISTS certior_instagram (
-        day date PRIMARY KEY, story_id text NOT NULL, headline text NOT NULL, clip_ids text[] NOT NULL,
-        media_id text, at timestamptz NOT NULL DEFAULT now())`;
+        day date NOT NULL, story_id text NOT NULL, headline text NOT NULL, clip_ids text[] NOT NULL,
+        media_id text, at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (day, story_id))`;
       await sql`ALTER TABLE certior_instagram ADD COLUMN IF NOT EXISTS permalink text`;
+      // one post a day became any number (2026-11-09): a post's key was its day, and is now its day and story
+      const [{ n }] = await sql`SELECT count(*)::int AS n FROM information_schema.key_column_usage
+        WHERE table_name = 'certior_instagram' AND constraint_name = 'certior_instagram_pkey'`;
+      if (n === 1) await sql`ALTER TABLE certior_instagram DROP CONSTRAINT certior_instagram_pkey, ADD PRIMARY KEY (day, story_id)`;
     },
     async token() {
       const [row] = await sql`SELECT value, updated_at FROM certior_settings WHERE key = 'ig_token'`;
@@ -59,21 +62,20 @@ export function sqlStore(sql) {
       await sql`INSERT INTO certior_settings (key, value, updated_at) VALUES ('ig_token', ${value}, now())
         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`;
     },
-    // a day is claimed before posting, so two runs can't both post; a failed post gives it back, and one that was cut
-    // off (the server restarted mid-post) stops counting after 15 minutes
+    // a story is claimed before posting, so two runs can't both post it; a failed post gives it back, and one that was
+    // cut off (the server restarted mid-post) stops counting after 15 minutes
     async claim(day, s) {
       const rows = await sql`INSERT INTO certior_instagram (day, story_id, headline, clip_ids)
         VALUES (${day}, ${s.id}, ${s.headline}, ${s.clips.map((c) => c.id)})
-        ON CONFLICT (day) DO UPDATE SET story_id = EXCLUDED.story_id, headline = EXCLUDED.headline, clip_ids = EXCLUDED.clip_ids, at = now()
+        ON CONFLICT (day, story_id) DO UPDATE SET headline = EXCLUDED.headline, clip_ids = EXCLUDED.clip_ids, at = now()
           WHERE certior_instagram.media_id IS NULL AND certior_instagram.at < now() - interval '15 minutes'
         RETURNING day`;
       return rows.length === 1;
     },
-    async posted(day, mediaId, permalink = null) { await sql`UPDATE certior_instagram SET media_id = ${mediaId}, permalink = ${permalink} WHERE day = ${day}`; },
-    async release(day) { await sql`DELETE FROM certior_instagram WHERE day = ${day} AND media_id IS NULL`; },
-    async hasDay(day) {
-      return (await sql`SELECT 1 FROM certior_instagram WHERE day = ${day} AND (media_id IS NOT NULL OR at > now() - interval '15 minutes')`).length > 0;
+    async posted(day, storyId, mediaId, permalink = null) {
+      await sql`UPDATE certior_instagram SET media_id = ${mediaId}, permalink = ${permalink} WHERE day = ${day} AND story_id = ${storyId}`;
     },
+    async release(day, storyId) { await sql`DELETE FROM certior_instagram WHERE day = ${day} AND story_id = ${storyId} AND media_id IS NULL`; },
     async postedDays(days) {      // the days a Reel went out: the stats page marks them on its chart
       const rows = await sql`SELECT to_char(day, 'YYYY-MM-DD') AS day FROM certior_instagram WHERE media_id IS NOT NULL AND day > current_date - ${days}::int`;
       return rows.map((r) => r.day);
@@ -83,14 +85,14 @@ export function sqlStore(sql) {
       return new Set(rows.flatMap((r) => r.clip_ids));
     },
     async recent(n) {
-      return sql`SELECT to_char(day, 'YYYY-MM-DD') AS day, headline, media_id, permalink,
-        (media_id IS NULL AND at < now() - interval '15 minutes') AS stale FROM certior_instagram ORDER BY day DESC LIMIT ${n}`;
+      return sql`SELECT to_char(day, 'YYYY-MM-DD') AS day, story_id, headline, media_id, permalink,
+        (media_id IS NULL AND at < now() - interval '15 minutes') AS stale FROM certior_instagram ORDER BY day DESC, at DESC LIMIT ${n}`;
     },
   };
 }
 
 export function makeInstagramPoster({ store, render, envToken, igUserId, publicBase, fetchFn = fetch, now = Date.now, wait = (ms) => new Promise((r) => setTimeout(r, ms)), log = console }) {
-  let media = null; // { day, mp4, cover }: the post being made, served for Instagram to fetch
+  let media = null; // { name, mp4, cover }: the post being made, served for Instagram to fetch
   let job = null; // the post started from the stats page: { running, step } while it's made, then how it ended
   const reels = new Map(); // "day:story id" -> the Reel's files (a promise): made once, for the preview and the post
   const systemUser = /^EAA/.test(envToken || "");
@@ -176,7 +178,6 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
   // Posts a story's Reel: the one picked on the stats page, or else the day's biggest.
   async function run(storyId) {
     const day = today();
-    if (await store.hasDay(day)) return { skipped: "already posted today" };
     const access_token = await token();
     if (!access_token) return { skipped: "not set up: no IG_ACCESS_TOKEN" };
     if (systemUser && !igUserId) return { skipped: "not set up: no IG_USER_ID (needed with a system user's token)" };
@@ -184,13 +185,14 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
     const story = storyId ? all.find((s) => s.id === storyId) : pickStory(all, now(), postedClipIds);
     if (!story) return { skipped: storyId ? "that story isn't in the feed any more" : "no story from the last day that all three sides covered" };
     if (!allowed(story, now(), postedClipIds)) return { skipped: "only a story from the last day that all three sides covered, and none that shares a clip with this week's posts" };
-    if (!(await store.claim(day, story))) return { skipped: "already posted today" };
+    if (!(await store.claim(day, story))) return { skipped: "that story is being posted already" };
     try {
       step("Making the Reel");
-      media = { day, ...(await reel(story)) };
+      const name = `${day}-${story.id}`;      // a new address for each post, so Instagram can't reuse an earlier video
+      media = { name, ...(await reel(story)) };
       const user_id = systemUser ? igUserId : (await call("GET", "/me", { fields: "user_id", access_token })).user_id;
       step("Sending it to Instagram");
-      const file = `${publicBase}/api/certior/instagram/${day}`;
+      const file = `${publicBase}/api/certior/instagram/${name}`;
       const { id: container } = await call("POST", `/${user_id}/media`, {
         media_type: "REELS", video_url: `${file}.mp4`, cover_url: `${file}.jpg`, share_to_feed: "true", caption: captionFor(story), access_token,
       });
@@ -205,11 +207,11 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
       const { id: mediaId } = await call("POST", `/${user_id}/media_publish`, { creation_id: container, access_token });
       // the post's address, for the stats page to link to; a post without one is still a post
       const permalink = await call("GET", `/${mediaId}`, { fields: "permalink", access_token }).then((r) => r.permalink || null, () => null);
-      await store.posted(day, mediaId, permalink);
+      await store.posted(day, story.id, mediaId, permalink);
       log.log(`[certior] posted to Instagram: ${story.headline}`);
       return { posted: story.headline, mediaId };
     } catch (err) {
-      await store.release(day);      // the next scheduled try can post it
+      await store.release(day, story.id);      // it can be tried again
       throw err;
     }
   }
@@ -237,7 +239,7 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
     job: () => job,
     /** GET /api/certior/instagram/:file: the Reel and cover Instagram fetches; only the post being made. */
     media(req, res) {
-      const ext = media && req.params.file.startsWith(media.day) ? req.params.file.slice(media.day.length) : "";
+      const ext = media && req.params.file.startsWith(media.name) ? req.params.file.slice(media.name.length) : "";
       if (ext !== ".mp4" && ext !== ".jpg") return res.status(404).end();
       res.set("Cache-Control", "no-store").sendFile(ext === ".mp4" ? media.mp4 : media.cover);
     },
