@@ -1,314 +1,467 @@
-// The day's story as a Reel: 1080x1920, about 20 s, narrated, with each outlet's own clip in it. The first Reel, a
-// still card brought in a panel at a time, lost half its viewers in 3 s; the second was text alone over a synthesised
-// tune that sounded like a ringtone.
-//   hook     the three clips side by side, Left on the left, under "Same story. / 3 sides.", said aloud
-//   sides    a swipe sideways to each, as in the app: its clip filling the screen (a widescreen one whole, under the
-//            header), slowly zooming through three frames of it, its outlet, and its headline lit word by word as the
-//            voice reads it
-//   compare  the three headlines together, and "Which one would you click?"
-//   end      the logo's arcs drawn in, "Link in bio", as in the tutorials
-// Headlines word for word with their outlets, as on the card. The clips are the three frames YouTube takes from every
-// video (i.ytimg.com: no key, no quota), blurred as the tutorials blur a playing clip, never sharp. The voice is Kokoro,
-// run here for free (certiorReelAudio.js). Without either (a network error, a crash) the Reel still renders: dark
-// boxes, or a reader's timing.
-// Made to fit a small server: one ffmpeg with one thread and a frame or two in flight, the voice in its own process.
+// The day's story as a Reel: 1080x1920, 8.8 s, made the way the Reel template (certior-reel-template v5) makes it.
+// No voice and no outlet footage: the sound is quiet effects on the cuts, and a song from Instagram's library goes on
+// top when it's posted.
+//   0.0  hook     the story's title from the first frame, over a crash zoom onto where it happened: the city or
+//                 country its headlines name (certiorReelMap.js), with a pin; with no clear place, onto the world
+//   1.5  sides    Left, Center and Right headlines snap in 0.6 s apart, as the app's Compare sheet shows them: the
+//                 side's dot and name, a panel with the headline in the serif, "Outlet · Rating · Country" under it
+//   5.0  the app  as when you tap Compare: the headlines dim and the Compare Headlines sheet slides up on the iPhone's
+//                 sheet curve, drawn from the app's own styles (public/certior/style.css), every outlet in it
+//   6.5  end      the brand lockup draws in (certior-wordmark.svg's arcs), then the tagline, Link in bio, the URL
+// Headlines are word for word. Made to fit a small server: frames drawn one at a time into one ffmpeg, one thread.
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import v8 from "node:v8";
+import vm from "node:vm";
 
-import { createCanvas, GlobalFonts, loadImage } from "@napi-rs/canvas";
+import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import ffmpeg from "ffmpeg-static";
 
-import { soundtrack, speak, VOICE_RATE } from "./certiorReelAudio.js";
+import { effects } from "./certiorReelAudio.js";
+import { findPlace, LEVELS, mapAround, merc, unmerc } from "./certiorReelMap.js";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-GlobalFonts.registerFromPath(path.join(here, "fonts", "InterVariable.ttf"), "Inter");
-const ICON = path.join(here, "..", "public", "certior", "icons", "icon-192.png");
+const font = (f) => path.join(path.dirname(fileURLToPath(import.meta.url)), "fonts", f);
+GlobalFonts.registerFromPath(font("InterVariable.ttf"), "Inter");
+GlobalFonts.registerFromPath(font("InterDisplay-Black.otf"), "InterDisplayBlack");
+GlobalFonts.registerFromPath(font("InterDisplay-SemiBold.otf"), "InterDisplaySemi");
+// the app's headline serif is New York on an iPhone, which Apple licenses only for mock-ups: Source Serif 4 (OFL)
+// stands in, cut at a display size for the big headlines, and at the app's own sizes (17 and 22 px), which is what
+// a browser picks from the variable font and so where the app's lines break
+GlobalFonts.registerFromPath(font("SourceSerif4-Semibold-48.ttf"), "SerifDisplay");
+GlobalFonts.registerFromPath(font("SourceSerif4-Semibold-17.ttf"), "SerifText");
+GlobalFonts.registerFromPath(font("SourceSerif4-Semibold-22.ttf"), "SerifTitle");
+// a full garbage collection on demand, without starting node with --expose-gc
+let gc = () => {};
+try { v8.setFlagsFromString("--expose-gc"); gc = vm.runInNewContext("gc"); } catch { /* without it, memory just runs higher */ }
+const ASC = { Inter: 0.96875, InterDisplayBlack: 0.96875, InterDisplaySemi: 0.96875, SerifDisplay: 1.036, SerifText: 1.036, SerifTitle: 1.036 };
+const DESC = { Inter: 0.2412, SerifText: 0.335, SerifTitle: 0.335 };      // with ASC, what a line box centres (the app's CSS line heights)
 
-const W = 1080, H = 1920, FPS = 30, X = 80, CW = W - 2 * X;
-const C = { bg: "#0b0c0f", ink: "#f6f7f9", muted: "#a9aeb7", tint: "#4a90ff", panel: "rgba(23,25,30,.86)" };
-const SIDES = [["left", "LEFT", "#4a90ff", "on the left"], ["center", "CENTER", "#b9bdc6", "in the center"], ["right", "RIGHT", "#ef5a52", "on the right"]];
-const TOP = 330, BOTTOM = 1490;      // under the header, above Instagram's caption
-const COL = (W - 12) / 3, HEAD = 860;      // the hook's three clips, side by side; a side's headline, from here down to BOTTOM
-const PAD = 34, PILL = 46, GAP = 20, SWIPE = 0.4, END_LEN = 1.9;
-const SIZES = [[76, 84], [70, 78], [64, 72], [58, 66], [52, 60], [48, 56], [44, 52], [40, 48], [36, 44], [32, 40]];      // headline [size, line height]: smaller, never cut
-// the logo (certior-mark.svg): three arcs of one circle, Left's blue on top, Center's grey left, Right's red below
-const MARK = [[-42.3, -126.3, "#4a90ff"], [-135.6, -224.4, "#b9bdc6"], [126.3, 42.3, "#ef5a52"]].map(([a, b, c]) => [a * Math.PI / 180, b * Math.PI / 180, c]);
-const readTime = (text) => Math.min(3.6, Math.max(1.8, 0.6 + 0.24 * text.split(/\s+/).length));      // without a voice
-const spoken = (s) => s.replace(/\s*\|\s*/g, ". ").replace(/[\p{Extended_Pictographic}\p{Variation_Selector}]/gu, "").trim();      // what the voice reads
+const W = 1080, H = 1920, FPS = 30;
+const SAFE_L = 60, SAFE_R = W - 150, SAFE_B = H - 420, CX = (SAFE_L + SAFE_R) / 2;      // clear of Instagram's bars
+const BG = [11, 12, 15], TEXT = [246, 247, 249], GREY = [150, 154, 163], SOFT = [200, 203, 210];
+// the app's colours (style.css, from oklch): its background, panels, text and sides
+const APP = { bg: [7, 7, 8], surface: [23, 24, 26], surface2: [42, 43, 46], ink: [244, 245, 246], muted: [181, 183, 187], faint: [150, 152, 156] };
+const SIDE = { left: [94, 168, 249], center: [200, 202, 208], right: [239, 126, 124], state: [235, 179, 83], unrated: [150, 152, 156] };
+const COLUMNS = { left: "Left", center: "Center", right: "Right", state: "State-funded", unrated: "Not rated" };
+const LEAN = { left: "Left", "lean-left": "Lean Left", center: "Center", "lean-right": "Lean Right", right: "Right", unrated: "Not rated" };
+// the brand mark's three arcs as certior-wordmark.svg draws them, [start, sweep] in degrees, drawn the way a C is
+// written (from the top right round to the bottom), in the logo's own colours
+const MARK = [[-44.5, -84.4, [74, 144, 255]], [222.2, -84.4, [185, 189, 198]], [128.9, -84.4, [239, 90, 82]]];
 
-const clamp = (p) => Math.min(Math.max(p, 0), 1);
-const ease = (p) => 1 - (1 - clamp(p)) ** 3;
-const inOut = (p) => { p = clamp(p); return p < 0.5 ? 4 * p ** 3 : 1 - (-2 * p + 2) ** 3 / 2; };
-const prog = (t, t0, d) => ease((t - t0) / d);
+const ZOOM_END = 0.62, T_HOOK_END = 1.5, REVEALS = [1.5, 2.1, 2.7];
+const T_TRANS = 5.0, T_SHEET = 5.45, T_HIT = 6.5, T_END = 8.8;
+const STACK_TOP = 385, PAD = 38, SHEET_Y = 250, END_Y = 640, MAP_Y = 760, HOOK_BOTTOM = 1340;
+
+const clamp = (x) => Math.min(Math.max(x, 0), 1);
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const easeOut = (x, p = 3) => 1 - (1 - clamp(x)) ** p;
+const easeInOut = (x) => (x < 0.5 ? 4 * x ** 3 : 1 - (-2 * x + 2) ** 3 / 2);
 const lerp = (a, b, k) => a + (b - a) * k;
-
-/** The three frames YouTube takes from a clip (a quarter, half and three quarters in), cut to the picture inside its
- *  black bars and blurred once. */
-async function framesOf(id) {
-  const got = await Promise.all(["hq1", "hq2", "hq3"].map(async (f) => {
-    try {
-      const r = await fetch(`https://i.ytimg.com/vi/${id}/${f}.jpg`, { signal: AbortSignal.timeout(8000) });
-      return r.ok ? await loadImage(Buffer.from(await r.arrayBuffer())) : null;
-    } catch { return null; }
-  }));
-  // the frames are 480x360 with black bars: left and right of an upright clip, above and below a 16:9 one. The
-  // picture is the widest box inside them across the three (a dark scene would pass for bars in one of them)
-  const imgs = got.filter(Boolean);
-  let [x0, x1, y0, y1] = [480, 0, 360, 0];
-  for (const img of imgs) {
-    const t = createCanvas(480, 360).getContext("2d");
-    t.drawImage(img, 0, 0, 480, 360);
-    const d = t.getImageData(0, 0, 480, 360).data, lum = (x, y) => (d[(y * 480 + x) * 4] + d[(y * 480 + x) * 4 + 1] + d[(y * 480 + x) * 4 + 2]) / 3;
-    const col = (x) => { let s = 0; for (let y = 0; y < 360; y += 4) s += lum(x, y); return s / 90; };
-    const row = (y) => { let s = 0; for (let x = 0; x < 480; x += 4) s += lum(x, y); return s / 120; };
-    let a = 0, b = 479, c = 0, e = 359;
-    while (a < 160 && col(a) < 20) a++;
-    while (b > 320 && col(b) < 20) b--;
-    while (c < 120 && row(c) < 20) c++;
-    while (e > 240 && row(e) < 20) e--;
-    [x0, x1, y0, y1] = [Math.min(x0, a), Math.max(x1, b), Math.min(y0, c), Math.max(y1, e)];
+const rgba = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+/** The app's sheet curve, cubic-bezier(.32, .72, 0, 1): quick to start, long to settle. */
+function iosEase(x) {
+  let lo = 0, hi = 1, s = 0.5;
+  for (let i = 0; i < 30; i++) {      // the curve's parameter for this x
+    s = (lo + hi) / 2;
+    if (0.96 * s * (1 - s) ** 2 + s ** 3 < x) lo = s; else hi = s;
   }
-  const sx = x0 + 2, sy = y0 + 2, sw = x1 - x0 - 3, sh = y1 - y0 - 3;      // and a pixel or two of the bars' soft edge
-  return imgs.map((img) => {
-    const c = createCanvas(sw, sh), x = c.getContext("2d");
-    x.filter = "blur(8.5px) brightness(.9) saturate(1.2)";      // as the tutorials blur a clip: 7 px across a 393 px phone
-    x.drawImage(img, sx, sy, sw, sh, -0.06 * sw, -0.06 * sh, 1.12 * sw, 1.12 * sh);      // 12% larger, as in the tutorials, so the blur has no rim
-    return c;
-  });
+  return 2.16 * s * (1 - s) ** 2 + 3 * s * s * (1 - s) + s ** 3;
+}
+
+const measure = createCanvas(8, 8).getContext("2d");
+/** A run of text: drawn with its top at the font's ascender, as the template places text. */
+function T(text, fam, weight, size, color, tracking = 0) {
+  measure.font = `${weight} ${size}px ${fam}`;
+  measure.letterSpacing = `${tracking * size}px`;
+  return { text, css: `${weight} ${size}px ${fam}`, size, asc: ASC[fam] * size, color, ls: `${tracking * size}px`, width: measure.measureText(text).width };
+}
+function put(ctx, t, x, top, alpha = 1, align = "left") {
+  if (alpha <= 0.003 || !t.text) return;
+  ctx.font = t.css; ctx.letterSpacing = t.ls; ctx.fillStyle = rgba(t.color, alpha); ctx.textAlign = align; ctx.textBaseline = "alphabetic";
+  ctx.fillText(t.text, x, top + t.asc);
+  ctx.letterSpacing = "0px"; ctx.textAlign = "left";
+}
+function wrap(text, css, width) {
+  measure.font = css; measure.letterSpacing = "0px";
+  const lines = [];
+  for (const w of String(text).split(/\s+/).filter(Boolean)) {
+    const t = lines.length ? `${lines.at(-1)} ${w}` : w;
+    if (lines.length && measure.measureText(t).width <= width) lines[lines.length - 1] = t; else lines.push(w);
+  }
+  return lines;
+}
+const ago = (iso, now) => {
+  const m = Math.max(0, (now - Date.parse(iso)) / 60000);
+  return m < 60 ? `${Math.round(m)}m ago` : m < 48 * 60 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`;
+};
+
+/** The app's Compare Headlines sheet for a story, as public/certior/app.js builds it and style.css draws it, at the
+ *  Reel's width (the app's 393 pt across 1080 px), as far down as the Reel shows it. The clip `nowId` has the tick. */
+function drawSheet(story, now, nowId) {
+  const k = W / 393, cv = createCanvas(W, H - SHEET_Y + 40), x = cv.getContext("2d"), bottom = cv.height / k;
+  x.scale(k, k);
+  x.fillStyle = rgba(APP.bg); x.fillRect(0, 0, 393, bottom);
+  // a line of text in a CSS line box: the font's ascent and descent centred in the line height
+  const line = (text, fam, weight, size, lh, color, left, top, align = "left") => {
+    x.font = `${weight} ${size}px ${fam}`; x.fillStyle = rgba(color); x.textAlign = align;
+    x.fillText(text, left, top + (lh - (ASC[fam] + DESC[fam]) * size) / 2 + ASC[fam] * size);
+    x.textAlign = "left";
+  };
+  x.fillStyle = rgba(APP.surface2); x.beginPath(); x.roundRect(178.5, 6, 36, 5, 2.5); x.fill();      // the grabber
+  line("Compare Headlines", "Inter", 600, 17, 22.1, APP.ink, 16, 22.95);
+  line("Done", "Inter", 600, 17, 22.1, APP.ink, 377, 22.95, "right");
+  let y = 62;
+  for (const l of wrap(story.headline, "600 22px SerifTitle", 361)) { line(l, "SerifTitle", 600, 22, 28, APP.ink, 16, y); y += 28; }
+  const sports = story.topic === "sports";
+  for (const [col, label] of Object.entries(COLUMNS)) {
+    const clips = story.clips.filter((c) => c.column === col);
+    if (!clips.length || y > bottom) continue;
+    if (!sports) {
+      y += 28;
+      x.fillStyle = rgba(SIDE[col]); x.beginPath(); x.arc(36, y + 9, 4, 0, 2 * Math.PI); x.fill();
+      line(label, "Inter", 400, 13, 18, APP.muted, 47, y);
+      line(`${clips.length} ${clips.length === 1 ? "outlet" : "outlets"}`, "Inter", 400, 13, 18, APP.faint, 361, y, "right");
+      y += 25;
+      if (col === "state") {
+        for (const l of wrap("YouTube notes that a government funds these outlets, in whole or in part, so they aren’t placed on the US left–right scale.", "400 13px Inter", 329)) {
+          line(l, "Inter", 400, 13, 18, APP.muted, 32, y); y += 18;
+        }
+        y += 8;
+      }
+    }
+    // the group: a panel of cells, a hairline between them
+    const cells = clips.map((c) => {
+      const title = wrap(c.title, "600 17px SerifText", 301);
+      const rest = [!sports && (col === "state" ? "State-funded" : LEAN[c.lean]), c.published && ago(c.published, now), c.country].filter(Boolean).join(" · ");
+      const note = c.note ? wrap(c.note, "400 13px Inter", 301) : [];
+      return { c, title, rest, note, h: 24 + title.length * 22 + 3 + 18 + (note.length ? 3 + note.length * 18 : 0) };
+    });
+    x.fillStyle = rgba(APP.surface); x.beginPath(); x.roundRect(16, y, 361, cells.reduce((a, c) => a + c.h, 0), 12); x.fill();
+    for (const [i, cell] of cells.entries()) {
+      if (i) { x.fillStyle = "rgba(255,255,255,0.12)"; x.fillRect(32, y, 345, 1); }
+      let ty = y + 12;
+      for (const l of cell.title) { line(l, "SerifText", 600, 17, 22, APP.ink, 32, ty); ty += 22; }
+      ty += 3;
+      x.font = "700 13px Inter";
+      const bw = x.measureText(cell.c.channel).width;
+      line(cell.c.channel, "Inter", 700, 13, 18, APP.muted, 32, ty);
+      if (cell.rest) line(` · ${cell.rest}`, "Inter", 400, 13, 18, APP.muted, 32 + bw, ty);
+      ty += 18;
+      if (cell.note.length) { ty += 3; for (const l of cell.note) { line(l, "Inter", 400, 13, 18, APP.faint, 32, ty); ty += 18; } }
+      if (cell.c.id === nowId) {      // the tick: a 6 x 12 box's right and bottom borders, turned 45 degrees
+        x.save(); x.translate(356, y + cell.h / 2 - 2); x.rotate(Math.PI / 4); x.translate(-3, -6);
+        x.strokeStyle = rgba(APP.ink); x.lineWidth = 2.2; x.lineJoin = "miter"; x.beginPath();
+        x.moveTo(0, 10.9); x.lineTo(4.9, 10.9); x.lineTo(4.9, 0); x.stroke(); x.restore();
+      }
+      y += cell.h;
+    }
+  }
+  return cv;
 }
 
 /** Writes the Reel (mp4) and its cover (jpg) for a story Left, Center and Right all covered. Returns their paths. */
 export async function renderReel(story, { now = new Date(), out = path.join(os.tmpdir(), `certior-reel-${story.id}-${Date.now()}.mp4`) } = {}) {
-  // the first clip from each side, as on the card (sport: the first three outlets)
+  // the first clip from each side, as on the card (sport: the first three outlets, no sides)
   const sports = story.topic === "sports";
-  const blocks = (sports ? story.clips.slice(0, 3).map((k) => [k, k.channel.toUpperCase(), C.muted, `${k.channel}.`])
-    : SIDES.map(([col, label, color, where]) => {
-      const k = story.clips.find((c) => c.column === col);
-      if (!k) throw new Error(`no ${col} clip: a Reel needs all three sides`);
-      return [k, label, color, `${k.channel}, ${where}.`];
-    })).map(([k, label, color, intro]) => ({ label, color, intro, title: k.title, id: k.id, outlet: sports ? k.country || "" : k.channel,
-    source: (sports ? [k.country] : [k.channel, k.country]).filter(Boolean).join(" · ") }));
-  const HOOK = ["Same story.", sports ? "3 outlets." : "3 sides."], ASK = ["Which one", "would you click?"];
-
-  // the voice and the frames, side by side; each line of the voice without the silence around it
-  const script = [HOOK.join(" "), ...blocks.flatMap((b) => [b.intro, spoken(b.title)]), ASK.join(" ")];
-  const [voice, frames] = await Promise.all([
-    speak(script).then((v) => v.map((a) => {
-      let i = 0, j = a.length;
-      while (i < j && Math.abs(a[i]) < 0.02) i++;
-      while (j > i && Math.abs(a[j - 1]) < 0.02) j--;
-      return a.subarray(Math.max(0, i - 600), Math.min(a.length, j + 1200));
-    }), (err) => { console.warn(`Certior Reel without a voice: ${err.message}`); return null; }),
-    Promise.all(blocks.map((b) => framesOf(b.id))),
-  ]);
-
-  // --- the timeline: scene k (hook, the three sides, compare) is on screen alone from A[k], and swipes off at B[k]
-  const L = voice ? voice.map((a) => a.length / VOICE_RATE) : [1, ...blocks.flatMap((b) => [0.9, readTime(b.title)]), 1.3];
-  const say = [[0.15, 0]], A = [0], B = [Math.max(1.9, 0.15 + L[0] + 0.35)];
-  blocks.forEach((b, i) => {
-    A.push(B.at(-1) + SWIPE);
-    const intro = A.at(-1) - 0.1, head = intro + L[1 + 2 * i] + 0.12;
-    say.push([intro, 1 + 2 * i], [head, 2 + 2 * i]);
-    b.h = [head - A.at(-1), head - A.at(-1) + L[2 + 2 * i]];      // the headline is read over this, in the scene's time
-    B.push(head + L[2 + 2 * i] + 0.5);
+  const picks = sports ? story.clips.slice(0, 3).map((c) => [c, null]) : ["left", "center", "right"].map((col) => {
+    const c = story.clips.find((k) => k.column === col);
+    if (!c) throw new Error(`no ${col} clip: a Reel needs all three sides`);
+    return [c, col];
   });
-  A.push(B.at(-1) + SWIPE); say.push([A.at(-1) + 0.1, L.length - 1]);
-  const END = Math.max(A.at(-1) + 2.6, A.at(-1) + 0.1 + L.at(-1) + 1.1), DUR = END + 0.3 + END_LEN;
-  B.push(END);
-
-  // --- layout: each headline in words at the largest size that fits, lit in turn as it is read
-  const canvas = createCanvas(W, H), ctx = canvas.getContext("2d");
-  const font = (weight, size) => { ctx.font = `${weight} ${size}px Inter`; };
-  const wrap = (text, width) => {
-    const lines = [];
-    for (const w of text.split(/\s+/)) {
-      const t = lines.length ? `${lines.at(-1)} ${w}` : w;
-      if (lines.length && ctx.measureText(t).width <= width) lines[lines.length - 1] = t; else lines.push(w);
-    }
-    return lines;
-  };
-  for (const b of blocks) {
-    for ([b.size, b.lh] of SIZES) { font(700, b.size); b.lines = wrap(`“${b.title}”`, CW - 60); if (b.lines.length * b.lh <= BOTTOM - HEAD) break; }      // clear of Instagram's buttons
-    const top = BOTTOM - b.lines.length * b.lh;      // the headline sits on BOTTOM
-    const words = b.lines.flatMap((l, n) => { let x = 0; return l.split(" ").map((w) => { const at = { w, x, y: top + n * b.lh }; x += ctx.measureText(`${w} `).width; return at; }); });
-    const weight = (w) => w.w.length + (/[,.;:!?]”?$/.test(w.w) ? 4 : 1), total = words.reduce((a, w) => a + weight(w), 0);
-    let sum = 0;
-    for (const w of words) { w.at = lerp(b.h[0], b.h[1], sum / total) - 0.05; sum += weight(w); }
-    b.words = words;
-  }
-  // compare: the three panels, at the largest size at which all three fit under the question
-  const PANELS = TOP + 2 * 100 + 70, panelH = (n, lh) => PAD + PILL + 16 + n * lh + PAD - 8;
-  let size, lh, quotes;
-  for ([size, lh] of SIZES.filter(([s]) => s <= 48)) {
-    font(600, size);
-    quotes = blocks.map((b) => wrap(`“${b.title}”`, CW - 2 * PAD));
-    if (quotes.reduce((a, q) => a + panelH(q.length, lh), 0) + 2 * GAP <= BOTTOM - PANELS) break;
-  }
-  const heights = quotes.map((q) => panelH(q.length, lh));
-  const tops = heights.map((_, i) => PANELS + heights.slice(0, i).reduce((a, h) => a + h + GAP, 0));
-
-  // the still parts, drawn once: the card's background (Left's blue and Right's red glowing in from opposite corners),
-  // and the header above every scene
-  const plain = createCanvas(W, H), p = plain.getContext("2d");
-  p.fillStyle = C.bg; p.fillRect(0, 0, W, H);
-  for (const [x, y, color] of [[0, 120, "rgba(74,144,255,.24)"], [W, H - 160, "rgba(239,90,82,.2)"]]) {
-    const g = p.createRadialGradient(x, y, 0, x, y, 950);
-    g.addColorStop(0, color); g.addColorStop(1, "rgba(0,0,0,0)");
-    p.fillStyle = g; p.fillRect(0, 0, W, H);
-  }
-  const header = createCanvas(W, TOP), hd = header.getContext("2d");
-  const icon = await loadImage(ICON);
-  hd.save(); hd.beginPath(); hd.roundRect(X, 236, 52, 52, 13); hd.clip(); hd.drawImage(icon, X, 236, 52, 52); hd.restore();
-  hd.textBaseline = "middle"; hd.shadowColor = "rgba(0,0,0,.5)"; hd.shadowBlur = 12;
-  hd.font = "700 30px Inter"; hd.fillStyle = C.ink; hd.fillText("Certior", X + 68, 263);
-  const topic = story.topic && story.topic !== "other" ? ` · ${story.topic[0].toUpperCase()}${story.topic.slice(1)}` : "";
-  hd.font = "500 26px Inter"; hd.fillStyle = C.ink; hd.textAlign = "right";
-  hd.fillText(now.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) + topic, X + CW, 263);
-
-  // a clip over d s in a box: its frames in turn, each fading in over the last, slowly zooming. It covers the box; with
-  // `top`, a widescreen clip is shown whole instead, no lower than `top`, over a dim copy of itself (stretched to cover
-  // a tall box it would be a blur of colour; upright ones fill it as they are)
-  function clip(f, u, d, x, y, w, h, r = 0, top = null) {
-    ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fillStyle = "#15171c"; ctx.fill(); ctx.clip();
-    const base = ctx.globalAlpha, z = 1.03 + 0.09 * clamp(u / d), per = d / Math.max(f.length, 1);
-    const put = (img, s, oy) => { const iw = img.width * s, ih = img.height * s; ctx.drawImage(img, x + (w - iw) / 2, y + (oy ?? (h - ih) / 2), iw, ih); };
-    f.forEach((img, k) => {
-      const a = k ? clamp((u - k * per + 0.25) / 0.5) : 1, cover = Math.max(w / img.width, h / img.height) * z;
-      if (a <= 0) return;
-      ctx.globalAlpha = base * a;
-      if (top == null || img.width < 1.4 * img.height) return put(img, cover);
-      const whole = Math.min(w / img.width, h / img.height) * z;
-      ctx.fillStyle = "#000"; ctx.fillRect(x, y, w, h);
-      ctx.globalAlpha = base * a * 0.45; put(img, cover);
-      ctx.globalAlpha = base * a; put(img, whole, Math.min(top, (h - img.height * whole) / 2));
-    });
-    ctx.restore();
-  }
-  // a side's pill, then where it comes from
-  function pill(b, x, y) {
-    font(800, 24); ctx.textBaseline = "middle";
-    const pw = ctx.measureText(b.label).width + 36;
-    ctx.fillStyle = b.color; ctx.beginPath(); ctx.roundRect(x, y, pw, PILL, PILL / 2); ctx.fill();
-    ctx.fillStyle = C.bg; ctx.fillText(b.label, x + 18, y + PILL / 2 + 1);
-    font(600, 30); ctx.fillStyle = C.ink; ctx.fillText(b.source, x + pw + 16, y + PILL / 2 + 1);
-  }
-  // the background's colour over the whole frame, as alpha stops [y, alpha] down it
-  const shade = (...stops) => {
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    for (const [y, a] of stops) g.addColorStop(y / H, `rgba(11,12,15,${a})`);
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  };
-
-  // the hook: the three clips side by side, Left on the left, rising in turn, under "Same story. / 3 sides."
-  function hook(u) {
-    ctx.drawImage(plain, 0, 0);
-    const rise = blocks.map((_, i) => prog(u, i * 0.08, 0.5));
-    blocks.forEach((b, i) => { ctx.globalAlpha = rise[i]; clip(frames[i], u, 3 * B[0], i * (COL + 6), 260 * (1 - rise[i]), COL, H); });
-    ctx.globalAlpha = 1; shade([0, 0.6], [600, 0.3], [1100, 0.3], [1600, 0.85], [H, 0.9]);
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    blocks.forEach((b, i) => {      // under the words, each its pill and outlet, above Instagram's buttons
-      const cx = i * (COL + 6) + COL / 2, y = 1090 + 260 * (1 - rise[i]);
-      ctx.globalAlpha = rise[i]; font(800, 24);
-      const pw = ctx.measureText(b.label).width + 36;
-      ctx.fillStyle = b.color; ctx.beginPath(); ctx.roundRect(cx - pw / 2, y, pw, PILL, PILL / 2); ctx.fill();
-      ctx.fillStyle = C.bg; ctx.fillText(b.label, cx, y + PILL / 2 + 1);
-      font(600, 30); if (ctx.measureText(b.outlet).width > COL - 24) font(600, 24);
-      ctx.fillStyle = C.ink; ctx.fillText(b.outlet, cx, y + PILL + 34);
-    });
-    font(800, 116); ctx.textBaseline = "top"; ctx.fillStyle = C.ink;
-    ctx.shadowColor = "rgba(0,0,0,.7)"; ctx.shadowBlur = 40; ctx.shadowOffsetY = 4;
-    HOOK.forEach((l, j) => { const a = prog(u, 0.1 + j * 0.25, 0.3); ctx.globalAlpha = a; ctx.fillText(l, W / 2, 740 + j * 124 + 30 * (1 - a)); });
-    ctx.shadowColor = "transparent"; ctx.textAlign = "left";
-  }
-  // a side: its clip filling the screen, its pill, and its headline lit word by word as it is read
-  function side(i, u) {
-    const b = blocks[i], d = B[i + 1] - A[i + 1];
-    ctx.drawImage(plain, 0, 0);
-    if (frames[i].length) clip(frames[i], u, d, 0, 0, W, H, 0, 470);
-    shade([0, 0.6], [520, 0.15], [HEAD - 160, 0.25], [BOTTOM, 0.88], [H, 0.92]);
-    pill(b, X, 372);
-    font(700, b.size); ctx.textBaseline = "top"; ctx.fillStyle = C.ink; ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 18;
-    for (const w of b.words) { ctx.globalAlpha = lerp(0.35, 1, prog(u, w.at, 0.12)); ctx.fillText(w.w, X + w.x, w.y); }
-    ctx.shadowColor = "transparent";
-  }
-  // compare: the question, and the three headlines over their clips
-  function compare(u) {
-    ctx.drawImage(plain, 0, 0);
-    font(800, 92); ctx.textBaseline = "top"; ctx.fillStyle = C.ink;
-    ASK.forEach((l, j) => { const a = prog(u, -0.3 + j * 0.12, 0.35); ctx.globalAlpha = a; ctx.fillText(l, X, TOP + 30 + j * 100 + 24 * (1 - a)); });      // in place as the swipe lands
-    blocks.forEach((b, i) => {
-      const a = prog(u, -0.1 + i * 0.1, 0.4), y = tops[i] + 50 * (1 - a), h = heights[i];
-      ctx.globalAlpha = a * 0.6; clip(frames[i], u, 9, X, y, CW, h, 30);
-      ctx.globalAlpha = a; ctx.fillStyle = C.panel; ctx.beginPath(); ctx.roundRect(X, y, CW, h, 30); ctx.fill();
-      pill(b, X + PAD, y + PAD);
-      font(600, size); ctx.textBaseline = "top"; ctx.fillStyle = C.ink;
-      quotes[i].forEach((l, j) => ctx.fillText(l, X + PAD, y + PAD + PILL + 16 + j * lh));
-    });
-  }
-  const scenes = [hook, (u) => side(0, u), (u) => side(1, u), (u) => side(2, u), compare];
-
-  function draw(t) {
-    ctx.globalAlpha = 1;
-    const at = B.findIndex((b) => t < b), k = at < 0 ? B.length - 1 : at;
-    const scene = (n, dx) => { ctx.save(); ctx.translate(dx, 0); scenes[n](t - A[n]); ctx.restore(); };
-    if (k > 0 && t < A[k]) { const p = inOut((t - B[k - 1]) / SWIPE); scene(k - 1, -p * W); scene(k, (1 - p) * W); }      // a swipe, as in the app
-    else scene(k, 0);
-    // on top: the bar, a part per side filling while that side is on, and the header
-    const bar = prog(t, B[0], SWIPE), segW = (CW - 20) / 3;
-    blocks.forEach((b, i) => {
-      if (bar <= 0) return;
-      const x = X + i * (segW + 10), fill = clamp((t - A[i + 1]) / (B[i + 1] - A[i + 1]));
-      ctx.fillStyle = b.color;
-      ctx.globalAlpha = 0.28 * bar; ctx.beginPath(); ctx.roundRect(x, TOP, segW, 12, 6); ctx.fill();
-      if (fill > 0) { ctx.globalAlpha = bar; ctx.beginPath(); ctx.roundRect(x, TOP, Math.max(12, segW * fill), 12, 6); ctx.fill(); }
-    });
-    ctx.globalAlpha = 1; ctx.drawImage(header, 0, 0);
-  }
-
-  // the end card at u s: the logo's arcs drawn in, then the name, "Link in bio" and the small print
-  function drawEnd(u) {
-    ctx.globalAlpha = 1;
-    ctx.drawImage(plain, 0, 0);
-    ctx.lineWidth = 52;
-    MARK.forEach(([a, b, color], i) => {
-      const k = prog(u, 0.05 + i * 0.15, 0.3);
-      if (k <= 0) return;
-      ctx.strokeStyle = color; ctx.beginPath(); ctx.arc(W / 2, 740, 114, a, a + (b - a) * k, true); ctx.stroke();
-    });
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    const name = prog(u, 0.45, 0.3), link = prog(u, 0.75, 0.25), small = prog(u, 0.95, 0.25);
-    ctx.globalAlpha = name; ctx.fillStyle = C.ink; font(700, 104); ctx.fillText("certior", W / 2, 985 + 20 * (1 - name));
-    ctx.globalAlpha = link; font(700, 40);
-    const lw = ctx.measureText("Link in bio").width + 88;
-    ctx.fillStyle = C.tint; ctx.beginPath(); ctx.roundRect((W - lw) / 2, 1100, lw, 92, 46); ctx.fill();
-    ctx.fillStyle = C.ink; ctx.fillText("Link in bio", W / 2, 1147);
-    ctx.globalAlpha = small; ctx.fillStyle = C.muted; font(500, 32); ctx.fillText("Free. No account. No ads.", W / 2, 1250);
-    ctx.textAlign = "left";
-  }
-
-  // --- the cover (the hook, all in), the sound, then every frame through ffmpeg
-  const cover = out.replace(/\.mp4$/i, "") + "-cover.jpg";
-  draw(1.3);
-  await fs.writeFile(cover, await canvas.encode("jpeg", 92));
+  // the sound first: its buffers are freed and reused before the canvases exist
   let peak = process.memoryUsage().rss;
   const sampler = setInterval(() => { peak = Math.max(peak, process.memoryUsage().rss); }, 250);
   const wav = out.replace(/\.mp4$/i, "") + ".wav";
-  await fs.writeFile(wav, soundtrack([{ t: 0, type: "swipe" }, ...B.slice(0, -1).map((t) => ({ t, type: "swipe" })),
-    ...(voice ? say.map(([t, k]) => ({ t, type: "voice", pcm: voice[k], sr: VOICE_RATE })) : []), { t: END + 0.2, type: "end" }], DUR, END));
+  await fs.writeFile(wav, effects({ duration: T_END, land: ZOOM_END, reveals: REVEALS, transition: T_TRANS, endHit: T_HIT + 0.1 }));
+
+  // --- where it happened, and the map around it
+  const place = findPlace(story);
+  const [tx, ty] = place ? merc(place.lon, place.lat) : merc(15, 25);
+  const s1 = !place ? W / 1.4e7 : place.kind === "country" ? W / 1.2e6 : W / 2.4e5, s0 = s1 / (!place ? 2.2 : 10.8);
+  const reach = W / 2.4e5 / s1;      // the city zoom's offsets and drift, at this zoom
+  const layers = place ? mapAround(place.lon, place.lat, 40, 25) : mapAround(0, 0, 360, 180, 2);
+  function camera(t) {
+    let s, cx, cy, rot, tilt;
+    if (t < ZOOM_END) {
+      const u = easeOut(prog(t, 0, ZOOM_END)), off = (1 - u) ** 2 * reach;
+      s = Math.exp(lerp(Math.log(s0), Math.log(s1), u));
+      [cx, cy, rot, tilt] = [tx - 900e3 * off, ty - 1300e3 * off, lerp(-14, 0, u), lerp(10, 38, u)];
+    } else {
+      const k = t - ZOOM_END;
+      s = s1 * (1 + 0.045 * k);
+      [cx, cy, rot, tilt] = [tx + 260 * k * reach, ty + 120 * k * reach, 0.55 * k, 38 + 0.4 * k];
+    }
+    const r = (rot * Math.PI) / 180, tl = (tilt * Math.PI) / 180;
+    return { s, cx, cy, cr: Math.cos(r), sr: Math.sin(r), st: Math.sin(tl), ct: Math.cos(tl) };
+  }
+  // map metres to the screen: turned, then tilted away in perspective, centred on the pin's spot
+  const project = (cam, X, Y, p) => {
+    const dx = (X - cam.cx) * cam.s, dy = -(Y - cam.cy) * cam.s, rx = dx * cam.cr - dy * cam.sr, ry = dx * cam.sr + dy * cam.cr;
+    const Z = -ry * cam.st, f = 1700 / Math.max(1700 + Z, 1);
+    p[0] = CX + rx * f; p[1] = MAP_Y + ry * cam.ct * f;
+    return 1700 + Z > 60;
+  };
+
+  // --- text and layout
+  const when = new Intl.DateTimeFormat("en-GB", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" })
+    .format(new Date(story.first || now)).replace(",", "").toUpperCase();
+  const tWhen = T(when, "Inter", 600, 28, TEXT, 0.16), tLabel = place && T(place.label.toUpperCase(), "Inter", 700, 30, TEXT, 0.22);
+  // the title: the largest size at which it fits in three lines and 380 px
+  let hs = 130, hook;
+  for (; hs > 56; hs -= 2) {
+    hook = wrap(story.headline, `900 ${hs}px InterDisplayBlack`, SAFE_R - SAFE_L);
+    if (hook.length <= 3 && hook.length * hs * 1.02 <= 380) break;
+  }
+  const tHook = hook.map((l) => T(l, "InterDisplayBlack", 900, hs, TEXT));
+  let kicker = story.headline.toUpperCase();
+  while (kicker.length > 8 && T(kicker, "Inter", 600, 26, TEXT, 0.16).width > SAFE_R - SAFE_L) kicker = `${kicker.slice(0, -2).trimEnd()}…`;
+  const tKicker = T(kicker, "Inter", 600, 26, TEXT, 0.16), tNote = T("Headlines word for word, as published on YouTube", "Inter", 500, 28, GREY);
+
+  // the three headlines, one size for all, the largest at which they fit together
+  const maxW = SAFE_R - SAFE_L - 2 * PAD, avail = SAFE_B - STACK_TOP - 20;
+  let size = 76, lh, total;
+  for (; size > 40; size -= 2) {
+    const n = picks.map(([c]) => wrap(c.title, `600 ${size}px SerifDisplay`, maxW).length);
+    lh = Math.floor(size * 1.22);
+    total = 3 * (40 + 14 + 2 * PAD + 50) + n.reduce((a, b) => a + b, 0) * lh + 2 * 40;
+    if (total <= avail && n.every((v) => v <= 5)) break;
+  }
+  let top = STACK_TOP + (avail - total) * 0.35;
+  const blocks = picks.map(([c, col]) => {
+    const lines = wrap(c.title, `600 ${size}px SerifDisplay`, maxW), words = [];
+    lines.forEach((l, li) => {
+      let wx = 0;
+      for (const w of l.split(" ")) {
+        words.push({ t: T(w, "SerifDisplay", 600, size, TEXT), x: SAFE_L + PAD + wx, li });
+        wx += T(`${w} `, "SerifDisplay", 600, size, TEXT).width;
+      }
+    });
+    const rest = [!sports && LEAN[c.lean], c.country].filter(Boolean).join(" · ");
+    const panel = top + 54, bottom = panel + 2 * PAD + lines.length * lh + 50;
+    const b = { col, top, panel, bottom, words, n: lines.length, title: col ? T(COLUMNS[col], "Inter", 400, 31, APP.muted) : null,
+      sub: [T(c.channel, "Inter", 700, 31, APP.muted), T(rest ? ` · ${rest}` : "", "Inter", 400, 31, APP.muted)] };
+    top = bottom + 40;
+    return b;
+  });
+  const sheet = drawSheet(story, now.getTime(), picks[0][0].id);
+  const tName = T("certior", "InterDisplaySemi", 600, 104, TEXT), tTag = T("Every side of every story.", "InterDisplaySemi", 600, 44, SOFT);
+  const tFacts = T("Free  ·  No account  ·  No ads", "Inter", 500, 32, GREY), tCta = T("Link in bio", "Inter", 700, 40, BG);
+  const tUrl = T("benjamintakaki.com/certior", "Inter", 600, 32, SOFT);
+
+  // --- the canvases: the frame, the map drawn apart (so it can glow and blur), grain, the vignette
+  const canvas = createCanvas(W, H), ctx = canvas.getContext("2d"), mapCv = createCanvas(W, H), mx = mapCv.getContext("2d");
+  let seed = 7;
+  const rand = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32;
+  const grain = [0, 1, 2, 3].map(() => {
+    const g = createCanvas(W / 2, H / 2), gx = g.getContext("2d"), img = gx.createImageData(W / 2, H / 2);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = 128 + 30 * Math.sqrt(-2 * Math.log(rand() || 1e-12)) * Math.cos(2 * Math.PI * rand());
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.max(0, Math.min(255, v)); img.data[i + 3] = 255;
+    }
+    gx.putImageData(img, 0, 0);
+    return g;
+  });
+  const vignette = ctx.createRadialGradient(W / 2, H * 0.46, 0, W / 2, H * 0.46, H * 0.78);
+  vignette.addColorStop(0, "rgba(0,0,0,0)"); vignette.addColorStop(0.45, "rgba(0,0,0,0)"); vignette.addColorStop(1, "rgba(0,0,0,0.62)");
+
+  const pt = [0, 0];
+  function drawLayer(levels, cam, width, alpha) {
+    if (alpha <= 0.01) return;
+    const tol = 1 / cam.s;
+    let li = 0;
+    while (li + 1 < LEVELS.length && LEVELS[li + 1] <= 2 * tol) li++;      // within 2 px: unseen under the glow and blur
+    const { segs, boxes } = levels[li], r = (2.6 * H) / cam.s;
+    mx.beginPath();
+    for (let i = 0; i < segs.length; i++) {
+      if (boxes[4 * i + 2] < cam.cx - r || boxes[4 * i] > cam.cx + r || boxes[4 * i + 3] < cam.cy - r || boxes[4 * i + 1] > cam.cy + r) continue;
+      const p = segs[i];
+      for (let k = 0; k < p.length; k += 2) {
+        if (!project(cam, p[k], p[k + 1], pt)) break;
+        if (k) mx.lineTo(pt[0], pt[1]); else mx.moveTo(pt[0], pt[1]);
+      }
+    }
+    mx.lineWidth = width; mx.lineJoin = "round"; mx.strokeStyle = rgba(TEXT, alpha); mx.stroke();
+  }
+  function drawGraticule(cam) {
+    const span = W / cam.s / 111000, step = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30].find((v) => span / v <= 7) ?? 30;
+    const [lonC, latC] = unmerc(cam.cx, cam.cy), n = 14;
+    mx.beginPath();
+    for (let j = -n; j <= n; j++) {
+      for (const along of [0, 1]) {      // a meridian, then a parallel
+        const fixed = Math.round((along ? latC : lonC) / step) * step + j * step;
+        for (let q = 0; q < 60; q++) {
+          const v = (along ? lonC : latC) - n * step + (2 * n * step * q) / 59;
+          const [X, Y] = along ? merc(v, fixed) : merc(fixed, v);
+          if (!project(cam, X, Y, pt)) break;
+          if (q) mx.lineTo(pt[0], pt[1]); else mx.moveTo(pt[0], pt[1]);
+        }
+      }
+    }
+    mx.lineWidth = 1; mx.strokeStyle = rgba(TEXT, 0.09); mx.stroke();
+  }
+  // Behind the headlines the map is fully blurred and drifts slowly: drawn every third frame, and blurred at half size
+  // (the same at 10 px), it costs a third as much, which matters for the world map's many lines
+  const halfCv = createCanvas(W / 2, H / 2), hx = halfCv.getContext("2d");
+  let halfKey = -1;
+  function drawMap(t, alpha, blur) {
+    const cam = camera(t), settled = blur >= 9.99, key = Math.floor((t * FPS) / 3);
+    if (alpha <= 0.01) return cam;
+    if (!settled || key !== halfKey) {
+      mx.clearRect(0, 0, W, H);
+      drawGraticule(cam);
+      const close = clamp((Math.log(cam.s) - Math.log(W / 1.4e6)) / (Math.log(W / 4.5e5) - Math.log(W / 1.4e6)));
+      drawLayer(layers[2], cam, 1.5, 0.42 * close);                                  // rivers, close up
+      drawLayer(layers[0], cam, lerp(1.6, 1.8, close), 0.55);                        // coast
+      drawLayer(layers[1], cam, lerp(1.3, 1.6, close), lerp(0.4, 0.5, close));       // borders
+      if (settled) { halfKey = key; hx.clearRect(0, 0, W / 2, H / 2); hx.filter = `blur(${blur / 2}px)`; hx.drawImage(mapCv, 0, 0, W / 2, H / 2); hx.filter = "none"; }
+    }
+    ctx.save();
+    if (settled) { ctx.globalAlpha = alpha; ctx.drawImage(halfCv, 0, 0, W, H); }
+    else if (blur > 0.3) { ctx.filter = `blur(${blur}px)`; ctx.globalAlpha = alpha; ctx.drawImage(mapCv, 0, 0); }
+    else {
+      ctx.filter = "blur(5px)"; ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = alpha * 0.8; ctx.drawImage(mapCv, 0, 0);
+      ctx.filter = "none"; ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = alpha; ctx.drawImage(mapCv, 0, 0);
+    }
+    ctx.restore();
+    return cam;
+  }
+
+  // the hook: when, where (coordinates, the crosshair that becomes the pin) and the title
+  function drawHook(t, cam) {
+    const out = 1 - easeInOut(prog(t, 1.3, 1.55)), lift = -60 * easeInOut(prog(t, 1.3, 1.55));
+    if (out <= 0) return;
+    put(ctx, tWhen, SAFE_L, 262, 0.75 * out);
+    if (place) {
+      let [lon, lat] = unmerc(cam.cx, cam.cy);
+      if (t >= ZOOM_END) [lon, lat] = [place.lon, place.lat];
+      const coords = `${Math.abs(lat).toFixed(4).padStart(7, "0")}° ${lat >= 0 ? "N" : "S"}    ${Math.abs(lon).toFixed(4).padStart(8, "0")}° ${lon >= 0 ? "E" : "W"}`;
+      put(ctx, T(coords, "Inter", 500, 26, GREY), SAFE_L, 306, 0.85 * out);
+      project(cam, tx, ty, pt);
+      const [px, py] = pt, land = prog(t, ZOOM_END - 0.08, ZOOM_END + 0.5), ret = (1 - land) * out;
+      if (ret > 0.01) {      // the crosshair, until the pin lands
+        ctx.lineWidth = 2; ctx.strokeStyle = rgba(TEXT, 0.7 * ret); ctx.beginPath(); ctx.arc(CX, MAP_Y, 46, 0, 2 * Math.PI);
+        for (const [ax, ay] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { ctx.moveTo(CX + ax * 46, MAP_Y + ay * 46); ctx.lineTo(CX + ax * 72, MAP_Y + ay * 72); }
+        ctx.stroke();
+      }
+      if (t >= ZOOM_END - 0.08) {
+        ctx.lineWidth = 3;
+        for (let k = 0; k < 3; k++) {      // rings going out from the pin
+          const rt = prog(t, ZOOM_END - 0.05 + k * 0.28, ZOOM_END + 0.95 + k * 0.28);
+          if (rt > 0 && rt < 1) { ctx.strokeStyle = rgba(TEXT, (1 - rt) * 0.8 * out); ctx.beginPath(); ctx.arc(px, py, lerp(12, 190, easeOut(rt)), 0, 2 * Math.PI); ctx.stroke(); }
+        }
+        const flash = 1 - prog(t, ZOOM_END - 0.04, ZOOM_END + 0.3);
+        if (flash > 0) { ctx.save(); ctx.filter = "blur(26px)"; ctx.fillStyle = rgba(TEXT, 0.9 * flash * out); ctx.beginPath(); ctx.arc(px, py, 40, 0, 2 * Math.PI); ctx.fill(); ctx.restore(); }
+      }
+      ctx.fillStyle = rgba(TEXT, out * clamp(land * 3)); ctx.beginPath(); ctx.arc(px, py, 9, 0, 2 * Math.PI); ctx.fill();
+      put(ctx, tLabel, px + 30, py - 15, out * easeOut(prog(t, ZOOM_END, ZOOM_END + 0.25)));
+    }
+    const sc = lerp(1.1, 1, easeOut(prog(t, 0, ZOOM_END + 0.1)));
+    ctx.save(); ctx.translate(SAFE_L, HOOK_BOTTOM); ctx.scale(sc, sc); ctx.translate(-SAFE_L, -HOOK_BOTTOM);
+    tHook.forEach((l, i) => put(ctx, l, SAFE_L, HOOK_BOTTOM + lift - (tHook.length - i) * hs * 1.02, out));
+    ctx.restore();
+  }
+
+  // the three headlines: the side's dot and name, then the panel rising into place, its words cascading in
+  function drawStack(t) {
+    const ka = easeOut(prog(t, REVEALS[0] - 0.05, REVEALS[0] + 0.25)) * (1 - easeOut(prog(t, T_TRANS, T_TRANS + 0.3)));
+    put(ctx, tKicker, SAFE_L, 264, 0.62 * ka);
+    put(ctx, tNote, SAFE_L, 304, 0.9 * ka);
+    blocks.forEach((b, i) => {
+      const lt = t - REVEALS[i];
+      if (lt < -0.02) return;
+      const snap = easeOut(prog(lt, 0, 0.22), 4), dy = 22 * (1 - snap), x = SAFE_L + PAD - 24 * (1 - snap);
+      if (b.title) {
+        ctx.fillStyle = rgba(SIDE[b.col], snap); ctx.beginPath(); ctx.arc(x + 9.5, b.top + b.title.asc - 11, 9.5, 0, 2 * Math.PI); ctx.fill();
+        put(ctx, b.title, x + 36, b.top, snap);
+      }
+      ctx.fillStyle = rgba(APP.surface, snap); ctx.beginPath(); ctx.roundRect(SAFE_L, b.panel + dy, SAFE_R - SAFE_L, b.bottom - b.panel, 29); ctx.fill();
+      const y0 = b.panel + PAD + dy;
+      b.words.forEach((w, k) => { const e = easeOut(prog(lt, 0.04 + k * 0.018, 0.22 + k * 0.018)); put(ctx, w.t, w.x, y0 + w.li * lh + 16 * (1 - e), e); });
+      const sa = easeOut(prog(lt, 0.12, 0.4)), ys = y0 + b.n * lh + 12;
+      put(ctx, b.sub[0], SAFE_L + PAD, ys, sa);
+      put(ctx, b.sub[1], SAFE_L + PAD + b.sub[0].width, ys, sa);
+    });
+  }
+
+  // as when you tap Compare: the headlines dim, and the sheet slides up over them on the iPhone's curve
+  function drawSheetUp(t) {
+    if (t < T_TRANS) return;
+    ctx.fillStyle = `rgba(0,0,0,${0.6 * easeOut(prog(t, T_TRANS, T_TRANS + 0.2))})`; ctx.fillRect(0, 0, W, H);
+    const y = SHEET_Y + (1 - iosEase(prog(t, T_TRANS, T_SHEET))) * (H - SHEET_Y + 40);
+    ctx.save(); ctx.beginPath(); ctx.roundRect(0, y, W, H + 60, 38); ctx.clip();      // the app's 14 pt corners
+    ctx.drawImage(sheet, 0, y); ctx.restore();
+  }
+
+  // the end card: everything fades to the background, the lockup draws in, then the rest
+  function drawEnd(t) {
+    ctx.fillStyle = rgba(BG, easeInOut(prog(t, T_HIT, T_HIT + 0.3))); ctx.fillRect(0, 0, W, H);
+    const lt = t - T_HIT - 0.1, d = 200, cx = CX - (1.1 * d + tName.width) / 2 + d / 2, cy = END_Y + d / 2;
+    const draw = easeInOut(prog(lt, 0, 0.6));
+    ctx.lineWidth = (d / 2) * (66 / 183); ctx.lineCap = "butt";
+    MARK.forEach(([start, sweep, color], i) => {
+      const k = clamp(draw * 1.6 - i * 0.3);
+      if (k <= 0) return;
+      ctx.strokeStyle = rgba(color); ctx.beginPath();
+      ctx.arc(cx, cy, (d / 2) * (150 / 183), (start * Math.PI) / 180, ((start + sweep * k) * Math.PI) / 180, sweep < 0); ctx.stroke();
+    });
+    const na = easeOut(prog(lt, 0.3, 0.65));      // "certior" at the wordmark's proportions: 0.52 of the mark, 0.6 of it right
+    put(ctx, tName, cx + 0.6 * d - 18 * (1 - na), cy + 0.342 * tName.size - tName.asc, na);
+    const y = END_Y + d, ta = easeOut(prog(lt, 0.45, 0.75));
+    put(ctx, tTag, CX, y + 52 + 12 * (1 - ta), ta, "center");
+    put(ctx, tFacts, CX, y + 118, easeOut(prog(lt, 0.55, 0.85)), "center");
+    const ca = easeOut(prog(lt, 0.65, 1)), pulse = 1 + 0.025 * Math.sin(Math.max(0, lt - 1.2) * 5) * prog(lt, 1.2, 1.5), pw = tCta.width + 90, ph = 86;
+    ctx.save(); ctx.translate(CX, y + 186 + ph / 2); ctx.scale(pulse * lerp(0.9, 1, ca), pulse * lerp(0.9, 1, ca));
+    ctx.fillStyle = rgba(TEXT, ca); ctx.beginPath(); ctx.roundRect(-pw / 2, -ph / 2, pw, ph, ph / 2); ctx.fill();
+    put(ctx, tCta, 0, -tCta.asc / 2 - 4, ca, "center"); ctx.restore();
+    put(ctx, tUrl, CX, y + 306, easeOut(prog(lt, 0.8, 1.15)), "center");
+  }
+
+  function frame(t) {
+    ctx.save();
+    ctx.fillStyle = rgba(BG); ctx.fillRect(0, 0, W, H);
+    const toBg = easeInOut(prog(t, 1.3, 1.7));
+    const cam = drawMap(t, (1 - 0.5 * toBg) * (1 - 0.75 * easeInOut(prog(t, T_TRANS, T_SHEET))), 10 * toBg);
+    if (t < T_HOOK_END + 0.1) drawHook(t, cam);
+    if (t >= REVEALS[0] - 0.05 && t < T_HIT + 0.35) { drawStack(t); drawSheetUp(t); }
+    if (t >= T_HIT) drawEnd(t);
+    ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = "overlay"; ctx.globalAlpha = 0.22; ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(grain[Math.floor(t * FPS) % grain.length], 0, 0, W, H);
+    ctx.restore();
+  }
+  // motion blur where things move fast: several moments within the frame's shutter, averaged on a canvas (each one
+  // drawn over the average so far), so the pixels are read out once a frame: every read is an 8 MB copy
+  const samples = (t) => (t < 0.4 || (t >= T_TRANS && t <= T_SHEET + 0.05) ? 8 : t <= ZOOM_END + 0.05 || (t >= 1.28 && t <= 1.62) ? 4 : 1);
+  const blurCv = createCanvas(W, H), bx = blurCv.getContext("2d");
+  function render(t) {
+    const n = samples(t);
+    if (n === 1) { frame(t); return canvas.data(); }
+    const shutter = (t < 0.35 ? 0.25 : 0.5) / FPS;
+    for (let k = 0; k < n; k++) {
+      frame(Math.max(0, t + shutter * ((k + 0.5) / n - 0.5)));
+      bx.globalAlpha = 1 / (k + 1);
+      bx.drawImage(canvas, 0, 0);
+    }
+    return blurCv.data();
+  }
+
+  // --- the cover (the hook, landed), the sound, then every frame through ffmpeg
+  const cover = out.replace(/\.mp4$/i, "") + "-cover.jpg";
+  frame(1.25);
+  await fs.writeFile(cover, await canvas.encode("jpeg", 92));
 
   // One thread, a short queue, and no look-ahead or B-frames: ffmpeg otherwise holds dozens of frames, and starts a
-  // thread with its own per CPU it sees (a small server reports its host's many). About 80 MB, against ~600 MB for the
-  // first version; the file comes out bigger, which doesn't matter, Instagram re-encodes it.
+  // thread with its own per CPU it sees (a small server reports its host's many). The file comes out bigger, which
+  // doesn't matter, Instagram re-encodes it.
   let errors = "";
   const enc = spawn(ffmpeg, ["-v", "error", "-y", "-filter_threads", "1",
     "-thread_queue_size", "2", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", `${W}x${H}`, "-r", String(FPS), "-i", "-", "-i", wav,
     "-vf", "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p",      // standard HD colour
     "-c:v", "libx264", "-pix_fmt", "yuv420p", "-color_range", "tv", "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
     "-preset", "veryfast", "-crf", "18", "-threads", "1", "-x264-params", "rc-lookahead=0:bframes=0:ref=1:sync-lookahead=0",
-    "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",      // as loud as Reels usually are, so the voice carries on a phone
     "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-shortest", "-movflags", "+faststart", out], { stdio: ["pipe", "ignore", "pipe"] });
   enc.stderr.on("data", (d) => { errors += d; });
   enc.stdin.on("error", () => {});      // a broken pipe: reported by the write below and ffmpeg's exit
@@ -318,18 +471,16 @@ export async function renderReel(story, { now = new Date(), out = path.join(os.t
   });
   const write = (buf) => new Promise((ok, fail) => enc.stdin.write(buf, (e) => (e ? fail(e) : ok())));
 
+  gc();      // what setting up left behind
   try {
-    for (let n = 0, frames = Math.round(DUR * FPS); n < frames; n++) {
-      const t = n / FPS, fade = (t - END) / 0.3;
-      if (t < END) draw(t);
-      else if (fade < 1) { draw(END); ctx.globalAlpha = ease(fade); ctx.drawImage(plain, 0, 0); }      // fades to the end card
-      else drawEnd(t - END - 0.3);
-      await write(canvas.data());
+    for (let n = 0, frames = Math.round(T_END * FPS); n < frames; n++) {
+      await write(render(n / FPS));
+      if (n % 5 === 4) gc();      // each frame's pixels are an 8 MB copy, which the collector otherwise lets pile up
     }
     enc.stdin.end();
-  } catch (err) {
+  } catch {
     enc.kill();      // ffmpeg stopped reading: its own error says why
   }
   try { await done; } finally { clearInterval(sampler); await fs.rm(wav, { force: true }); }
-  return { mp4: out, cover, duration: DUR, voiced: Boolean(voice), peakMB: Math.round(peak / 2 ** 20) };
+  return { mp4: out, cover, duration: T_END, place: place?.label ?? null, peakMB: Math.round(peak / 2 ** 20) };
 }
