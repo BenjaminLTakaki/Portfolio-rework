@@ -25,7 +25,7 @@ import { sql, ensureSchema, getMatches, getRoleMatchups, getMatchTeams } from ".
 import { refreshFromRiot } from "./riot.js";
 import { PLAYERS, publicPlayer } from "./players.js";
 import { makeFeedRefresher, movedTo } from "./swipeNews.js";
-import { cleanEvents, makeStats, statsAuth } from "./swipeNewsStats.js";
+import { cleanEvents, makeStats, readAuth, statsAuth } from "./swipeNewsStats.js";
 import { makePreview } from "./swipeNewsPreview.js";
 import { makeInstagramPoster, sqlStore } from "./certiorInstagram.js";
 
@@ -89,7 +89,9 @@ app.post("/api/swipe-news/events", express.json({ limit: "4kb", type: () => true
   if (events.length) await stats.record(events).catch((err) => console.error("[swipe-news] counts not saved:", err.message || err));
 });
 const statsGate = statsAuth(process.env.SWIPE_STATS_PASSWORD);
-app.get("/api/swipe-news/stats", statsGate, async (_req, res) => {
+// the numbers, for the password or the read-only key Claude's MCP uses (mcp/certior.mjs): reading only, never posting
+const readGate = readAuth(process.env.CERTIOR_READ_TOKEN, statsGate);
+app.get("/api/swipe-news/stats", readGate, async (_req, res) => {
   try {
     res.json({ rows: await stats.rows(60) });
   } catch (err) {
@@ -128,6 +130,14 @@ app.get("/api/certior/instagram-status", statsGate, async (_req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
+  }
+});
+// Instagram's numbers for each Reel: views, reach, watch time, skip rate, likes, comments, shares, saves
+app.get("/api/certior/insights", readGate, async (_req, res) => {
+  try {
+    res.json(await instagram.insights());
+  } catch (err) {
+    res.status(err.status || 502).json({ error: String(err.message || err) });
   }
 });
 // a story's Reel for the stats page to show and download (?cover: its cover); made once a day, shared with the post.

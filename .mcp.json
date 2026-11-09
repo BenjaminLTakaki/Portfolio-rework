@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "certior": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["mcp/certior.mjs"]
+    }
+  }
+}

@@ -43,14 +43,27 @@ export function makeStats(sql) {
   };
 }
 
+const digest = (s) => crypto.createHash("sha256").update(s).digest();      // equal lengths, for timingSafeEqual
+
 /** HTTP Basic auth with one password; without SWIPE_STATS_PASSWORD set, the page simply doesn't exist. */
 export function statsAuth(password) {
-  const digest = (s) => crypto.createHash("sha256").update(s).digest();
   return (req, res, next) => {
     if (!password) return res.status(404).end();
     const encoded = (req.get("authorization") || "").replace(/^Basic\s+/i, "");
     const given = Buffer.from(encoded, "base64").toString().split(":").slice(1).join(":");
     if (given && crypto.timingSafeEqual(digest(given), digest(password))) return next();
     res.set("WWW-Authenticate", 'Basic realm="Certior stats"').status(401).send("Password needed");
+  };
+}
+
+/** Reading the numbers without the password: a read-only key (CERTIOR_READ_TOKEN, 32+ characters) sent as
+ *  "Authorization: Bearer <key>", for Claude's MCP (mcp/certior.mjs). It only opens GETs it's put on, so it can't post
+ *  or make Reels; without one set, it opens nothing. Anything else goes through the password. */
+export function readAuth(token, passwordGate) {
+  return (req, res, next) => {
+    const given = /^Bearer\s+(\S+)$/i.exec(req.get("authorization") || "")?.[1];
+    if (!given) return passwordGate(req, res, next);
+    if (req.method === "GET" && token?.length >= 32 && crypto.timingSafeEqual(digest(given), digest(token))) return next();
+    res.status(401).send("Wrong key");
   };
 }

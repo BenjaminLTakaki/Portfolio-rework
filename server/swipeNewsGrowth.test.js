@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { cleanEvents, makeStats, statsAuth } from "./swipeNewsStats.js";
+import { cleanEvents, makeStats, readAuth, statsAuth } from "./swipeNewsStats.js";
 import { makePreview, withPreview } from "./swipeNewsPreview.js";
 
 // --- anonymous counts --------------------------------------------------------
@@ -37,6 +37,24 @@ test("the stats page needs the password, and doesn't exist without one", () => {
   assert.equal(run("s3cret:pw", basic("s3cret:pw")), "ok");      // a colon in the password is fine
   assert.equal(run("s3cret", basic("wrong")), 401);
   assert.equal(run("s3cret", undefined), 401);
+});
+
+test("the read-only key opens GETs only, never when it's unset or short, and the password still works", () => {
+  const KEY = "k".repeat(43);
+  const run = (token, header, method = "GET") => {
+    const res = { code: 200, status(c) { this.code = c; return this; }, set() { return this; }, send() { return this; }, end() { return this; } };
+    let passed = false;
+    readAuth(token, statsAuth("s3cret"))({ method, get: () => header }, res, () => { passed = true; });
+    return passed ? "ok" : res.code;
+  };
+  assert.equal(run(KEY, `Bearer ${KEY}`), "ok");
+  assert.equal(run(KEY, `Bearer ${KEY}x`), 401);
+  assert.equal(run(KEY, `Bearer ${KEY}`, "POST"), 401);
+  assert.equal(run(undefined, "Bearer undefined"), 401);
+  assert.equal(run("", "Bearer "), 401);
+  assert.equal(run("short", "Bearer short"), 401);
+  assert.equal(run(KEY, `Basic ${Buffer.from("ben:s3cret").toString("base64")}`), "ok");
+  assert.equal(run(KEY, undefined), 401);
 });
 
 // --- link previews -----------------------------------------------------------

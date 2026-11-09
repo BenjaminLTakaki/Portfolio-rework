@@ -186,7 +186,10 @@
   #ig-recent .story, #ig-recent th:nth-child(2) { white-space: normal; text-align: left; }
   #ig-recent td:first-child, #ig-recent th:first-child { text-align: left; }
   #ig-recent { margin-top: 8px; }
-  #ig-recent a { color: var(--ink); text-decoration-color: var(--muted); text-underline-offset: 2px; }
+  #ig-recent a, #reels-table a { color: var(--ink); text-decoration-color: var(--muted); text-underline-offset: 2px; }
+  #reels-table td:nth-child(2), #reels-table th:nth-child(2) { white-space: normal; text-align: left; min-width: 240px; }
+  #reels-table td:first-child, #reels-table th:first-child { text-align: left; }
+  #reels-table thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
   .errbox { border-color: var(--down); }
   .errbox p { margin: 6px 0 12px; }
 
@@ -330,6 +333,17 @@
         </div>
       </section>
     </section>
+
+    <section class="band" id="reels" aria-labelledby="reels-title">
+      <div class="band-head"><h2 id="reels-title">Reels on Instagram</h2></div>
+      <div class="card" style="padding: 0">
+        <div class="card-head" style="padding: 16px 20px">
+          <p class="note" id="reels-note" style="margin: 0; max-width: 80ch">Loading Instagram’s numbers…</p>
+          <a class="btn" id="reels-csv">Download CSV</a>
+        </div>
+        <div class="table-wrap"><table id="reels-table"></table></div>
+      </div>
+    </section>
   </main>
 </div>
 <div id="tip" role="tooltip"></div>
@@ -362,6 +376,7 @@ const getStatus = () => fetch('/api/certior/instagram-status').then((r) => (r.ok
 const firstStatus = getStatus();
 const feedP = fetch(`https://benjaminltakaki.github.io/certior-news/feed.json?t=${Date.now()}`).then((r) => r.json()).catch(() => null);
 const statsP = fetch('/api/swipe-news/stats').then(async (r) => (r.ok ? r.json() : Promise.reject(new Error(`the server answered ${r.status}`))));
+const insightsP = fetch('/api/certior/insights').then((r) => r.json()).catch(() => null);
 
 // ---- the numbers, as { day: { name: n } }
 let byDay = {}, haveStats = false, posted = new Set();
@@ -948,6 +963,45 @@ $('#ig-run').onclick = async () => {
   showInstagram();
 };
 showInstagram(firstStatus);
+
+// ---- Reels on Instagram: each one's numbers, as Instagram counts them (up to two days late)
+const REEL_COLS = [      // [heading, CSV column, value, shown as]
+  ['Views', 'views', (r) => r.views, fmt],
+  ['Reach', 'reach', (r) => r.reach, fmt],
+  ['Avg watch', 'avg_watch_seconds', (r) => (r.ig_reels_avg_watch_time == null ? null : r.ig_reels_avg_watch_time / 1000), (v) => `${v.toFixed(1)} s`],
+  ['Skip rate', 'skip_rate_percent', (r) => r.reels_skip_rate, (v) => `${v.toFixed(1)}%`],
+  ['Likes', 'likes', (r) => r.likes, fmt], ['Comments', 'comments', (r) => r.comments, fmt],
+  ['Shares', 'shares', (r) => r.shares, fmt], ['Saves', 'saves', (r) => r.saved, fmt],
+];
+// a CSV cell: quoted when needed, and text that a spreadsheet would run as a formula (=, +, -, @) kept as text
+const csvCell = (v) => {
+  const s = v == null ? '' : typeof v === 'string' && /^[=+\-@]/.test(v) ? `'${v}` : String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+async function showReels() {
+  const j = await insightsP;
+  if (!j?.reels) { $('#reels-note').textContent = `Instagram’s numbers didn’t load${j?.error ? `: ${j.error}` : ''}.`; return; }
+  const failed = [...new Set(j.reels.flatMap((r) => r.errors))];
+  $('#reels-note').textContent = `${j.reels.length ? `${many(j.reels.length, 'Reel')}, newest first.` : 'No Reels yet.'} Instagram’s own numbers, up to two days late. `
+    + `Skip rate: the share of views that scrolled away within 3 seconds.${failed.length ? ` Some numbers didn’t load: ${failed[0]}` : ''}`;
+  const head = el('thead'), hr = el('tr'), body = el('tbody');
+  hr.append(el('th', 'Posted'), el('th', 'Reel'), ...REEL_COLS.map(([label]) => el('th', label)));
+  head.append(hr);
+  for (const r of j.reels) {
+    const tr = el('tr'), title = el('td');
+    if (/^https:\/\//.test(r.permalink || '')) {
+      const a = Object.assign(el('a', r.title || 'Untitled'), { href: r.permalink, target: '_blank', rel: 'noopener' });
+      a.append(el('span', ' (opens Instagram)', 'sr'));
+      title.append(a);
+    } else title.textContent = r.title || 'Untitled';
+    tr.append(el('td', short(r.at.slice(0, 10))), title, ...REEL_COLS.map(([, , get, show]) => el('td', get(r) == null ? '—' : show(get(r)))));
+    body.append(tr);
+  }
+  $('#reels-table').replaceChildren(head, body);
+  const csv = [['posted', 'reel', 'link', ...REEL_COLS.map(([, name]) => name)], ...j.reels.map((r) => [r.at, r.title, r.permalink, ...REEL_COLS.map(([, , get]) => get(r))])];
+  Object.assign($('#reels-csv'), { href: URL.createObjectURL(new Blob([csv.map((row) => row.map(csvCell).join(',')).join('\n')], { type: 'text/csv' })), download: `certior-reels-${today}.csv` });
+}
+showReels();
 </script>
 </body>
 </html>

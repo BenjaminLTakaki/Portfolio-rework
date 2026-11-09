@@ -197,3 +197,31 @@ test("a feed that fails to load again keeps the last one, so a Reel being made i
   assert.deepEqual(await p.preview("big"), { mp4: "/tmp/big.mp4", cover: "/tmp/big-cover.jpg" });
   await assert.rejects(poster(memoryStore(), ig, { fetchFn: async () => { throw new TypeError("fetch failed"); } }).preview("big"), /fetch failed/);      // never loaded: says so
 });
+
+test("each Reel's numbers from Instagram, with the story the server's posts showed, and what didn't load", async () => {
+  const store = memoryStore();
+  store.recent = async () => [{ story_id: "big", headline: "Story big", media_id: "r1" }, { story_id: "x", headline: "Not posted", media_id: null }];
+  const asked = [];
+  const json = (data, ok = true) => ({ ok, json: async () => data });
+  const fetchFn = async (url) => {
+    const u = new URL(url), metric = u.searchParams.get("metric");
+    asked.push(`${u.pathname}${metric ? `?${metric}` : ""}`);
+    if (u.pathname === "/me") return json({ user_id: "17841" });
+    if (u.pathname === "/17841/media") return json({ data: [
+      { id: "r1", media_product_type: "REELS", caption: "Same story, three sides.\nLeft…", permalink: "https://www.instagram.com/reel/r1/", timestamp: "2026-11-08T18:00:00+0000" },
+      { id: "p1", media_product_type: "FEED", caption: "A photo" },
+      { id: "r2", media_product_type: "REELS", caption: "How to read the sides\n#certior", permalink: "https://www.instagram.com/reel/r2/", timestamp: "2026-11-07T18:00:00+0000" },
+    ] });
+    if (metric === "reels_skip_rate") return u.pathname === "/r1/insights" ? json({ data: [{ name: "reels_skip_rate", values: [{ value: 54.7 }] }] }) : json({ error: { message: "(#100) not available" } }, false);
+    if (u.pathname.endsWith("/insights")) return json({ data: metric.split(",").map((name, i) => ({ name, period: "lifetime", values: [{ value: (i + 1) * 100 }] })) });
+    throw new Error(`unexpected ${u.pathname}`);
+  };
+  const { reels } = await poster(store, { fetchFn }).insights();
+  assert.deepEqual(reels.map((r) => [r.id, r.title, r.story]), [["r1", "Story big", "big"], ["r2", "How to read the sides", null]], "Reels only, newest first");
+  assert.deepEqual([reels[0].views, reels[0].reach, reels[0].ig_reels_avg_watch_time, reels[0].reels_skip_rate], [100, 200, 300, 54.7]);
+  assert.deepEqual(reels[0].errors, []);
+  assert.equal(reels[1].reels_skip_rate, undefined);
+  assert.match(reels[1].errors[0], /not available/, "shown, not hidden");
+  assert.equal(reels[1].views, 100, "one missing number doesn't lose the rest");
+  assert.equal(asked.filter((a) => a.includes("/insights")).length, 4);
+});

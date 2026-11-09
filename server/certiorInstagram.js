@@ -15,6 +15,8 @@ const SIDES = [["left", "Left"], ["center", "Center"], ["right", "Right"]];
 const DAY_MS = 864e5;
 export const REFRESH_AFTER_MS = 7 * DAY_MS;
 const STATUS_TRIES = 60, STATUS_WAIT_MS = 5000;      // Instagram takes a minute or two to process a video
+// a Reel's numbers (Instagram's media insights); the token needs instagram_manage_insights. Watch time is in ms.
+const REEL_METRICS = "views,reach,ig_reels_avg_watch_time,likes,comments,shares,saved,total_interactions";
 
 const outlets = (s) => new Set(s.clips.map((c) => c.channel)).size;
 const firstOf = (s, col) => s.clips.find((c) => c.column === col);
@@ -127,6 +129,8 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
     }
     return saved.value;
   }
+  // the Instagram account: from IG_USER_ID with a system user's token, else asked of Instagram
+  const userId = async (access_token) => (systemUser ? igUserId : (await call("GET", "/me", { fields: "user_id", access_token })).user_id);
 
   // { at, stories }: kept for a minute, as the stats page asks every few seconds while a Reel is made, and kept on if
   // fetching it again fails, so one failed fetch can't stop a Reel that's being made
@@ -190,7 +194,7 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
       step("Making the Reel");
       const name = `${day}-${story.id}`;      // a new address for each post, so Instagram can't reuse an earlier video
       media = { name, ...(await reel(story)) };
-      const user_id = systemUser ? igUserId : (await call("GET", "/me", { fields: "user_id", access_token })).user_id;
+      const user_id = await userId(access_token);
       step("Sending it to Instagram");
       const file = `${publicBase}/api/certior/instagram/${name}`;
       const { id: container } = await call("POST", `/${user_id}/media`, {
@@ -216,9 +220,38 @@ export function makeInstagramPoster({ store, render, envToken, igUserId, publicB
     }
   }
 
+  // Instagram's numbers for each Reel on the account (posted here or in the app), newest first, with the story the
+  // server's own posts showed. Instagram updates them slowly (up to two days late), so a full set is kept 10 minutes.
+  // ponytail: the newest 50 posts only; page through /media if that ever matters
+  let numbers = null;
+  async function insights() {
+    if (numbers && now() - numbers.at < 10 * 60e3) return numbers.data;
+    const access_token = await token();
+    if (!access_token) throw Object.assign(new Error("not set up: no IG_ACCESS_TOKEN"), { status: 503 });
+    const user_id = await userId(access_token);
+    const { data: media = [] } = await call("GET", `/${user_id}/media`, { fields: "id,caption,media_product_type,permalink,timestamp", limit: 50, access_token });
+    const ours = new Map((await store.recent(100)).filter((p) => p.media_id).map((p) => [p.media_id, p]));
+    const reels = await Promise.all(media.filter((m) => m.media_product_type === "REELS").map(async (m) => {
+      const post = ours.get(m.id);
+      const r = { id: m.id, at: m.timestamp, permalink: m.permalink, title: post?.headline || (m.caption || "").split("\n")[0], story: post?.story_id ?? null, errors: [] };
+      for (const metric of [REEL_METRICS, "reels_skip_rate"]) {      // skip rate on its own: Meta still calls it in development
+        try {
+          for (const d of (await call("GET", `/${m.id}/insights`, { metric, access_token })).data || []) r[d.name] = d.values?.[0]?.value ?? d.total_value?.value ?? null;
+        } catch (err) {
+          r.errors.push(err.message);
+        }
+      }
+      return r;
+    }));
+    const data = { reels, fetched: new Date(now()).toISOString() };
+    if (reels.every((r) => !r.errors.length)) numbers = { at: now(), data };
+    return data;
+  }
+
   return {
     run,
     preview,
+    insights,
     /** The caption a story's Reel goes out with, so the stats page can show it before you post. */
     async caption(storyId) {
       const story = (await stories()).find((s) => s.id === storyId);
