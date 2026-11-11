@@ -4,7 +4,7 @@
 //   - Serve the built Vite SPA (dist/) with SPA-history fallback.
 //   - Expose a small read API the /lol dashboard fetches at runtime:
 //       GET /api/lol/dashboard  -> { matches, topGames, matchTeams }
-//       GET /api/health         -> Postgres version (DB smoke test)
+//       GET /api/health         -> { ok } (can the database be reached)
 //   - Run a daily node-cron job that incrementally refreshes data from the
 //     Riot API into Neon — keeping the dashboard current without a redeploy.
 //   - Certior (the news app, built in the swipe-news repo, formerly Swipe News) at /certior:
@@ -25,24 +25,41 @@ import { sql, ensureSchema, getMatches, getRoleMatchups, getMatchTeams } from ".
 import { refreshFromRiot } from "./riot.js";
 import { PLAYERS, publicPlayer } from "./players.js";
 import { makeFeedRefresher, movedTo } from "./swipeNews.js";
-import { cleanEvents, makeStats, readAuth, statsAuth } from "./swipeNewsStats.js";
+import { cleanEvents, makeStats, rateLimit, readAuth, statsAuth } from "./swipeNewsStats.js";
 import { makePreview } from "./swipeNewsPreview.js";
 import { makeInstagramPoster, sqlStore } from "./certiorInstagram.js";
+import { isPage, sitemap, withHead } from "./pages.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, "..", "dist");
 const PORT = process.env.PORT || 3000;
 
 const app = express();
+app.disable("x-powered-by");
+
+// Headers every answer gets. A browser only acts on Strict-Transport-Security over HTTPS, so it does nothing on localhost.
+// ponytail: no Content-Security-Policy for scripts (Certior's pages, the scenes and YouTube would each need their own
+// rules, and a wrong one breaks the page); frame-ancestors is the part that needs no upkeep
+app.use((_req, res, next) => {
+  res.set({
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Strict-Transport-Security": "max-age=31536000",
+    "Content-Security-Policy": "frame-ancestors 'self'",
+    "X-Frame-Options": "SAMEORIGIN",
+  });
+  next();
+});
 
 // --- API -------------------------------------------------------------------
 
 app.get("/api/health", async (_req, res) => {
   try {
-    const [{ version }] = await sql`SELECT version()`;
-    res.type("text/plain").send(version);
+    await sql`SELECT 1`;
+    res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ error: String(err.message || err) });
+    console.error("[health]", err.message || err);      // the reason goes to the log, not to whoever asks
+    res.status(503).json({ ok: false });
   }
 });
 
@@ -60,7 +77,8 @@ app.get("/api/lol/:player/dashboard", async (req, res) => {
     ]);
     res.json({ player, matches, roleMatchups, matchTeams });
   } catch (err) {
-    res.status(500).json({ error: String(err.message || err) });
+    console.error("[lol]", key, err.message || err);
+    res.status(500).json({ error: "The match history can't be loaded right now." });
   }
 });
 
@@ -80,10 +98,11 @@ app.use("/certior", (_req, _res, next) => {
 app.get("/swipe-news/sw.js", (_req, res) => res.type("js").set("Cache-Control", "no-cache").sendFile(path.join(__dirname, "swipe-news-retired-sw.js")));
 app.use("/swipe-news", movedTo("/certior"));
 app.get("/swipe-news-stats", (_req, res) => res.redirect(301, "/certior-stats"));
+app.get("/project/swipe-news", (_req, res) => res.redirect(301, "/project/certior"));
 
 // Anonymous daily totals: the app posts a small batch of counts when you leave it (sendBeacon).
 const stats = makeStats(sql);
-app.post("/api/swipe-news/events", express.json({ limit: "4kb", type: () => true }), async (req, res) => {
+app.post("/api/swipe-news/events", rateLimit(), express.json({ limit: "4kb", type: () => true }), async (req, res) => {
   const events = cleanEvents(req.body);
   res.status(204).end();
   if (events.length) await stats.record(events).catch((err) => console.error("[swipe-news] counts not saved:", err.message || err));
@@ -174,13 +193,24 @@ app.get(["/certior/", "/certior/index.html"], makePreview({ readIndex: async () 
 
 // --- Static SPA + history fallback ----------------------------------------
 
-app.use(express.static(DIST_DIR));
+app.get("/sitemap.xml", (_req, res) => res.type("xml").send(sitemap()));
 
-// Any non-API GET that isn't a real file falls back to index.html so
-// react-router can handle the route on the client.
-app.use((req, res, next) => {
+const ASSETS = path.join(DIST_DIR, "assets") + path.sep;
+app.use(express.static(DIST_DIR, {
+  setHeaders(res, file) {
+    // Vite puts a hash of the contents in every name under /assets, so those never change; a page is asked for each time
+    if (file.startsWith(ASSETS)) res.set("Cache-Control", "public, max-age=31536000, immutable");
+    else if (file.endsWith(".html")) res.set("Cache-Control", "no-cache");
+  },
+}));
+
+// Any other GET gets index.html so react-router can draw the page: with 200 if the app has that page, else with 404
+// (the app then shows "Page not found"), so a search engine doesn't file every wrong address as a copy of the home page.
+let spaHtml = null;
+app.use(async (req, res, next) => {
   if (req.method !== "GET" || req.path.startsWith("/api/")) return next();
-  res.sendFile(path.join(DIST_DIR, "index.html"));
+  spaHtml ??= await readFile(path.join(DIST_DIR, "index.html"), "utf8");
+  res.status(isPage(req.path) ? 200 : 404).set("Cache-Control", "no-cache").type("html").send(withHead(spaHtml, req.path));
 });
 
 // --- Daily refresh ---------------------------------------------------------
@@ -202,15 +232,11 @@ cron.schedule("17 6 * * *", () => runRefresh("daily"), { timezone: "UTC" });
 
 // --- Boot ------------------------------------------------------------------
 
+// The site is served even when the database can't be reached: the pages are files, and only /lol and the stats need it.
+app.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
+});
 ensureSchema()
   .then(() => stats.ensure())
   .then(() => igStore.ensure())
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server running at http://localhost:${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error("Failed to ensure DB schema:", err);
-    process.exit(1);
-  });
+  .catch((err) => console.error("The database is not ready, so /lol and the Certior stats will fail:", err.message || err));

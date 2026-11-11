@@ -1,8 +1,8 @@
 {
   "name": "beta-portfolio",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Benjamin Takaki's portfolio, with the Certior news app",
+  "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { cleanEvents, makeStats, readAuth, statsAuth } from "./swipeNewsStats.js";
+import { cleanEvents, makeStats, rateLimit, readAuth, statsAuth } from "./swipeNewsStats.js";
 import { makePreview, withPreview } from "./swipeNewsPreview.js";
 
 // --- anonymous counts --------------------------------------------------------
@@ -104,4 +104,13 @@ test("previews find the story (by clip if its id changed), cache the feed, and f
   assert.deepEqual(await serve(preview, { story: "s_unknown1" }), { next: true });
   const broken = makePreview({ readIndex: async () => INDEX, fetchFn: async () => { throw new Error("offline"); }, log: { error() {} } });
   assert.deepEqual(await serve(broken, { story: "s_abc123" }), { next: true });
+});
+
+test("one address can post only so often a minute, and the minute starts again", () => {
+  let clock = 0;
+  const limit = rateLimit(2, 60e3, () => clock);
+  const post = (ip) => { let code = 200; limit({ get: () => ip, ip: "proxy" }, { status: (c) => { code = c; return { end() {} }; } }, () => {}); return code; };
+  assert.deepEqual([post("a"), post("a"), post("a"), post("b")], [200, 200, 429, 200]);
+  clock = 60e3;
+  assert.equal(post("a"), 200);
 });
