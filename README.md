@@ -24,7 +24,7 @@ npm run preview
 - `/`: portfolio, filterable projects, About, and contact.
 - `/project/:id`: project case studies with evidence and limitations.
 - `/forecaster`: browser-based simulation using `public/forecaster/msi_2026.json`.
-- `/certior/`: static Certior app in `public/certior`, copied from the certior-news repo's `docs/` (only the `FEED_URL` line in `app.js` differs). It reads its feed from that repo's GitHub Pages site, so new stories need no Render deploy.
+- `/certior/`: static Certior app in `public/certior`, copied from the certior-news repo's `docs/` (only the `FEED_URL` line in `shared.js` differs; `app.js` loads the screens as native modules, no build step). It reads its feed from that repo's GitHub Pages site, so new stories need no Render deploy.
 - `/spotifycovergenerator`: external demo status and recovery links.
 - `/privacy`: what the portfolio itself collects (nothing beyond the host's logs). Keep it true to the code.
 - `/lol` and `/lol/:player`: player dashboard hub and database-backed analytics.
