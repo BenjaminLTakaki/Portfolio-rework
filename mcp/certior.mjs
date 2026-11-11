@@ -38,6 +38,7 @@ const TOOLS = {
     run: async ({ days = 14 } = {}) => {
       const from = new Date(Date.now() - Math.min(60, Math.max(1, days)) * 864e5).toISOString().slice(0, 10);
       const byDay = {};
+      // ponytail: the old path, which the site keeps as an alias; /api/certior/stats once the rename is deployed
       for (const { day, name, n } of (await get("/api/swipe-news/stats")).rows) if (day > from) (byDay[day] ||= {})[name] = n;
       return byDay;
     },

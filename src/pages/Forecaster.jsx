@@ -16,14 +16,14 @@ function MatchCard({ slot, data, onLock, onUnlock, locks }) {
         disabled={!canLock(slot, locks)}
         aria-label={locked ? `Undo result for ${slot}` : `Lock ${team} as winner in ${slot}`}
         onClick={() => (locked ? onUnlock(slot) : onLock(slot, team))}
-        className={`relative flex w-full items-center justify-between gap-3 px-3.5 py-2.5 text-left ${ease} enabled:hover:bg-ink/[0.04] disabled:cursor-default ${loser ? "opacity-40" : ""}`}
+        className={`relative flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left ${ease} enabled:hover:bg-ink/[0.04] disabled:cursor-default ${loser ? "opacity-40" : ""}`}
       >
         <span className={`truncate text-[13px] ${p >= 0.5 || winner ? "font-medium text-ink" : "text-ink-muted"}`}>
           {team}
-          {winner && <span className="ml-1.5 font-mono text-[11px]">✓</span>}
+          {winner && <span className="ml-1.5 font-mono text-[12px]">✓</span>}
         </span>
         {!locked && (
-          <span className="font-mono text-[11px] tabular-nums text-ink-muted">{pct(p)}</span>
+          <span className="font-mono text-[12px] tabular-nums text-ink-muted">{pct(p)}</span>
         )}
         {!locked && (
           <span
@@ -40,7 +40,7 @@ function MatchCard({ slot, data, onLock, onUnlock, locks }) {
         {row(a, pA)}
         {row(b, 1 - pA)}
       </div>
-      <p className="mt-1.5 px-1 font-mono text-[10px] leading-snug text-ink-faint">
+      <p className="mt-1.5 px-1 font-mono text-[12px] leading-snug text-ink-faint">
         {locked ? "locked · click to undo" : !canLock(slot, locks) ? "projection · resolve earlier rounds to lock" : "choose a winner"}
       </p>
     </div>
@@ -50,11 +50,11 @@ function MatchCard({ slot, data, onLock, onUnlock, locks }) {
 function Section({ label, rounds, slots, onLock, onUnlock, locks }) {
   return (
     <div className="mt-12">
-      <p className="mb-5 font-mono text-[10px] uppercase tracking-[0.24em] text-ink-faint">{label}</p>
+      <p className="mb-5 font-mono text-[12px] uppercase tracking-[0.24em] text-ink-faint">{label}</p>
       <div className="flex gap-10 overflow-x-auto pb-3">
         {rounds.map((r) => (
           <div key={r.name} className="flex flex-col">
-            <p className="mb-3 whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.18em] text-ink-muted">
+            <p className="mb-3 whitespace-nowrap font-mono text-[12px] uppercase tracking-[0.18em] text-ink-muted">
               {r.name}
             </p>
             <div className="flex grow flex-col justify-around gap-5">
@@ -89,7 +89,7 @@ export default function Forecaster() {
   if (error)
     return <main id="main-content" className="pt-28 px-6 max-w-screen-xl mx-auto text-sm text-ink-muted">{error}</main>;
   if (!model || !result)
-    return <main id="main-content" className="pt-28 px-6 max-w-screen-xl mx-auto font-mono text-[11px] uppercase tracking-[0.2em] text-ink-faint">Simulating…</main>;
+    return <main id="main-content" className="pt-28 px-6 max-w-screen-xl mx-auto font-mono text-[12px] uppercase tracking-[0.2em] text-ink-faint">Simulating…</main>;
 
   const v = model.meta.validation;
   const onLock = (slot, team) => setLocks((current) => updateLocks(current, slot, team));
@@ -99,14 +99,14 @@ export default function Forecaster() {
     <main id="main-content" className="pt-28 pb-24 px-6 lg:px-12 max-w-screen-xl mx-auto animate-fade-up">
       <Link
         to="/project/lol-forecaster"
-        className={`mb-14 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted ${ease} hover:text-ink`}
+        className={`-mt-3 mb-11 py-3 inline-flex items-center gap-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink-muted ${ease} hover:text-ink`}
       >
         <span className="text-base leading-none">←</span>
         About this model
       </Link>
 
       <header className="mb-4">
-        <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.26em] text-ink-muted">
+        <p className="mb-4 font-mono text-[12px] uppercase tracking-[0.26em] text-ink-muted">
           Esports forecasting / Bayesian player ratings
         </p>
         <h1 className="max-w-[16ch] text-[clamp(2.4rem,6.5vw,5.6rem)] font-light tracking-[-0.055em] leading-[0.9] text-ink">
@@ -129,7 +129,7 @@ export default function Forecaster() {
           [model.meta.trainedPlayers.toLocaleString(), "players rated"],
           [Object.keys(locks).length || "0", "results locked"],
         ].map(([n, l]) => (
-          <p key={l} className="font-mono text-[11px] text-ink-faint">
+          <p key={l} className="font-mono text-[12px] text-ink-faint">
             <span className="text-[15px] font-medium tabular-nums text-ink">{n}</span>
             <span className="ml-2 uppercase tracking-[0.14em]">{l}</span>
           </p>
@@ -137,7 +137,7 @@ export default function Forecaster() {
         {Object.keys(locks).length > 0 && (
           <button
             onClick={() => setLocks({})}
-            className={`font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted underline underline-offset-4 ${ease} hover:text-ink`}
+            className={`font-mono text-[12px] uppercase tracking-[0.18em] text-ink-muted underline underline-offset-4 ${ease} hover:text-ink`}
           >
             clear locks
           </button>
@@ -162,13 +162,13 @@ export default function Forecaster() {
       />
 
       <div className="mt-16">
-        <p className="mb-5 font-mono text-[10px] uppercase tracking-[0.24em] text-ink-faint">Title odds</p>
+        <p className="mb-5 font-mono text-[12px] uppercase tracking-[0.24em] text-ink-faint">Title odds</p>
         <div className="overflow-x-auto" role="region" aria-label="Tournament title odds" tabIndex={0}>
         <table className="w-full min-w-[540px] max-w-3xl border-collapse">
           <thead>
             <tr className="border-b border-ink/[0.12]">
               {["Team", "Region", "Strength", "Grand final", "Champion"].map((h) => (
-                <th key={h} className="py-2.5 pr-6 text-left font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint">
+                <th key={h} className="py-2.5 pr-6 text-left font-mono text-[12px] uppercase tracking-[0.18em] text-ink-faint">
                   {h}
                 </th>
               ))}
@@ -178,7 +178,7 @@ export default function Forecaster() {
             {result.odds.map((r) => (
               <tr key={r.team} className="border-b border-ink/[0.06]">
                 <td className="py-2.5 pr-6 text-[13px] font-medium text-ink">{r.team}</td>
-                <td className="py-2.5 pr-6 font-mono text-[11px] text-ink-muted">{r.region}</td>
+                <td className="py-2.5 pr-6 font-mono text-[12px] text-ink-muted">{r.region}</td>
                 <td className="py-2.5 pr-6 font-mono text-[12px] tabular-nums text-ink-muted">{r.strength.toFixed(1)}</td>
                 <td className="py-2.5 pr-6 font-mono text-[12px] tabular-nums text-ink-muted">{pct(r.grandFinal)}</td>
                 <td className="py-2.5 pr-6 font-mono text-[12px] tabular-nums text-ink">{pct(r.champion)}</td>
@@ -190,7 +190,7 @@ export default function Forecaster() {
       </div>
 
       <div className="mt-16 max-w-[62ch] border-t border-ink/[0.08] pt-8">
-        <p className="mb-4 font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">Method</p>
+        <p className="mb-4 font-mono text-[12px] uppercase tracking-[0.22em] text-ink-faint">Method</p>
         <p className="text-sm leading-[1.75] text-ink-muted">
           Each player carries an OpenSkill (Plackett-Luce) rating learned from{" "}
           {model.meta.trainingYears[0]}–{model.meta.trainingYears.at(-1)} match data.

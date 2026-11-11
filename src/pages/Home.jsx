@@ -23,7 +23,7 @@ export default function Home() {
         <div className="hero-layout">
           <div>
             <h1 id="intro-title">From trained models<br /><span className="text-ink-muted">to working products.</span></h1>
-            <p className="hero-description">I’m Benjamin, an ICT student at Fontys. I build the models, APIs, and interfaces that turn ideas in audio and esports into software you can use.</p>
+            <p className="hero-description">I’m Benjamin, an ICT student at Fontys. I build the models, APIs, and interfaces that turn ideas in audio, news, and esports into software you can use.</p>
             <div className="flex flex-wrap gap-3 mt-8">
               <Link className="action action-primary" to="/#work">Explore my work <span aria-hidden="true">↘</span></Link>
               <a className="action" href="mailto:bentakaki7@gmail.com">Get in touch <span aria-hidden="true">↗</span></a>
@@ -80,7 +80,7 @@ export default function Home() {
         <div className="page-container capabilities-layout">
           <div><p className="eyebrow mb-4">02 / How I build</p><h2 id="capabilities-title">Both sides<br />of the product.</h2><p className="text-sm leading-relaxed text-ink-muted mt-5 max-w-80">From a useful prediction to an interface someone can actually work with.</p></div>
           <div className="capability-list">
-            <div><span className="eyebrow">01</span><div><h3>Model the problem</h3><p>Audio representations, sequence models, Bayesian ratings, and calibrated probabilities.</p><Link className="text-link" to="/project/guitarscribe">PyTorch & audio ML in GuitarScribe →</Link></div></div>
+            <div><span className="eyebrow">01</span><div><h3>Model the problem</h3><p>Audio representations, sequence models, text embeddings, Bayesian ratings, and calibrated probabilities.</p><Link className="text-link" to="/project/guitarscribe">PyTorch & audio ML in GuitarScribe →</Link></div></div>
             <div><span className="eyebrow">02</span><div><h3>Build the experience</h3><p>React and Vue interfaces, Python APIs, OAuth flows, and relational data.</p><Link className="text-link" to="/project/spotify-cover-generator">A full-stack generation pipeline →</Link></div></div>
             <div><span className="eyebrow">03</span><div><h3>Take it to delivery</h3><p>Client requirements, API integrations, admin tooling, and deployment.</p><Link className="text-link" to="/project/freelance-portfolios">Explore freelance delivery →</Link></div></div>
           </div>
@@ -90,7 +90,7 @@ export default function Home() {
       <section id="about" className="page-container about-section" aria-labelledby="about-title">
         <p className="eyebrow mb-6">03 / The person behind the work</p>
         <div className="about-layout">
-          <div><h2 id="about-title">Curious by nature.<br />International by upbringing.</h2><p className="mt-6 text-base leading-relaxed text-ink-muted max-w-prose">I’m studying ICT at Fontys University of Applied Sciences, specialising in machine learning and AI. My projects tend to start with something I care about: understanding a guitar recording, forecasting a tournament, or helping someone put their work online.</p><p className="mt-4 text-base leading-relaxed text-ink-muted max-w-prose">Having lived in Thailand, Senegal, India, Japan, and now the Netherlands, I bring an international perspective to the teams I work with.</p></div>
+          <div><h2 id="about-title">Curious by nature.<br />International by upbringing.</h2><p className="mt-6 text-base leading-relaxed text-ink-muted max-w-prose">I’m studying ICT at Fontys University of Applied Sciences, specialising in machine learning and AI. My projects tend to start with something I care about: understanding a guitar recording, forecasting a tournament, seeing how different outlets cover the same story, or helping someone put their work online.</p><p className="mt-4 text-base leading-relaxed text-ink-muted max-w-prose">Having lived in Thailand, Senegal, India, Japan, and now the Netherlands, I bring an international perspective to the teams I work with.</p></div>
           <div className="about-details">
             <div><p className="eyebrow mb-3">Education</p><p className="font-medium text-sm">Bachelor of ICT</p><p className="text-sm text-ink-muted mt-1">Fontys University · 2024–present</p><p className="text-sm mt-5">International French Baccalaureate, Honours</p><p className="text-sm text-ink-muted mt-1">Lycée Français International de Tokyo · 2024</p></div>
             <div><p className="eyebrow mb-3">Languages</p><p className="text-sm leading-loose text-ink-muted">English C2 · French C2<br />Japanese B1 · Dutch A1</p></div>
@@ -109,7 +109,7 @@ export default function Home() {
           <a className="contact-email" href="mailto:bentakaki7@gmail.com">bentakaki7@gmail.com</a>
         </div>
       </section>
-      <footer className="page-container site-footer"><span>© {new Date().getFullYear()} Benjamin Takaki</span><div className="flex flex-wrap gap-6"><a href="/certior/privacy.html">Privacy</a><a href="https://github.com/BenjaminLTakaki" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://linkedin.com/in/benjamin-takaki" target="_blank" rel="noreferrer">LinkedIn ↗</a><Link to="/#main-content">Back to top ↑</Link></div></footer>
+      <footer className="page-container site-footer"><span>© {new Date().getFullYear()} Benjamin Takaki</span><div className="flex flex-wrap gap-6"><Link to="/privacy">Privacy</Link><a href="https://github.com/BenjaminLTakaki" target="_blank" rel="noreferrer">GitHub ↗</a><a href="https://linkedin.com/in/benjamin-takaki" target="_blank" rel="noreferrer">LinkedIn ↗</a><Link to="/#main-content">Back to top ↑</Link></div></footer>
     </main>
   );
 }

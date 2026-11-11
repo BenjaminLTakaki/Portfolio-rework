@@ -1,16 +1,17 @@
 {
   "name": "beta-portfolio",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Benjamin Takaki's portfolio, with the Certior news app",
+  "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && vite build --ssr src/entry-server.jsx --outDir dist-ssr && node scripts/prerender.js",
     "test": "node --test src/lib/*.test.js server/*.test.js",
     "preview": "vite preview",
     "start": "node server/index.js",
     "server": "node server/index.js",
-    "seed": "node server/seed.js"
+    "seed": "node server/seed.js",
+    "test:browser": "node --test tests/*.test.js"
   },
   "keywords": [],
   "author": "",
@@ -37,6 +38,7 @@
     "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^6.0.1",
     "autoprefixer": "^10.5.0",
+    "playwright": "^1.59.1",
     "postcss": "^8.5.14",
     "tailwindcss": "^3.4.19",
     "vite": "^8.0.12"

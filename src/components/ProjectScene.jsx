@@ -221,7 +221,7 @@ function SwipeFeed({ color, motion }) {
   </group>;
 }
 
-const shapes = { "lol-forecaster": Forecast, "swipe-news": SwipeFeed, guitarscribe: Harmonics, "spotify-cover-generator": Records, "audio-fingerprinting": Fingerprint, animewatchlist: Film, "freelance-portfolios": BrowserWindows };
+const shapes = { "lol-forecaster": Forecast, certior: SwipeFeed, guitarscribe: Harmonics, "spotify-cover-generator": Records, "audio-fingerprinting": Fingerprint, animewatchlist: Film, "freelance-portfolios": BrowserWindows };
 
 export default function ProjectScene({ project, interaction, visible, paused, reduced }) {
   const group = useRef();

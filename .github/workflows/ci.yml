@@ -1,0 +1,18 @@
+# The tests and the build on every push, so a broken change shows before the manual Render deploy.
+name: CI
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-24.04      # Playwright 1.59 can't install Chromium on ubuntu-latest (26.04); move on with Playwright
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      # Certior in a real browser: first visit, swiping, Compare, every tab, nothing from YouTube before opting in
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser

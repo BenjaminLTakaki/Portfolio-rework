@@ -4,6 +4,7 @@ import Nav from "./components/Nav";
 import Home from "./pages/Home";
 import ProjectPage from "./pages/ProjectPage";
 import SpotifyRedirect from "./pages/SpotifyRedirect";
+import Privacy from "./pages/Privacy";      // small, and prerendered with the case studies
 const Lol = lazy(() => import("./pages/Lol"));
 const LolHub = lazy(() => import("./pages/LolHub"));
 const Forecaster = lazy(() => import("./pages/Forecaster"));
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/lol" element={<LolHub />} />
         <Route path="/lol/:player" element={<Lol />} />
         <Route path="/forecaster" element={<Forecaster />} />
+        <Route path="/privacy" element={<Privacy />} />
         <Route path="*" element={<main id="main-content" className="page-container pt-32"><h1 className="text-4xl font-light tracking-tight">Page not found.</h1><Link className="action mt-8" to="/#work">Explore the projects →</Link></main>} />
       </Routes>
       </Suspense>

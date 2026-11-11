@@ -3,11 +3,11 @@ import { Globe3D } from "@/components/ui/3d-globe";
 import { ArtworkBoundary } from "./ProjectScene";
 
 const FLAG = {
-  Bangkok: "https://flagcdn.com/w40/th.png",
-  Dakar: "https://flagcdn.com/w40/sn.png",
-  "New Delhi": "https://flagcdn.com/w40/in.png",
-  Tokyo: "https://flagcdn.com/w40/jp.png",
-  Eindhoven: "https://flagcdn.com/w40/nl.png",
+  Bangkok: "/globe/th.png",
+  Dakar: "/globe/sn.png",
+  "New Delhi": "/globe/in.png",
+  Tokyo: "/globe/jp.png",
+  Eindhoven: "/globe/nl.png",
 };
 
 export default function Globe({ places }) {
@@ -74,12 +74,12 @@ export default function Globe({ places }) {
                     >
                       {place.name}
                     </p>
-                    <p className="text-[11px] font-mono text-ink-muted mt-0.5">
+                    <p className="text-[12px] font-mono text-ink-muted mt-0.5">
                       {place.country}
                     </p>
                   </div>
                 </div>
-                <span className="text-[11px] font-mono text-ink-muted">
+                <span className="text-[12px] font-mono text-ink-muted">
                   {place.years}
                 </span>
               </div>

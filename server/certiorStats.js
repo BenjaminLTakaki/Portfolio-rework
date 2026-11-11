@@ -8,7 +8,21 @@ export const EVENT_NAME =
   /^(visit|new|age_(0|1|2_7|8_30|31_plus)|homescreen|browser|mode_(videos|text)|story|watched_(left|center|right|state|unrated)|story_compared|story_watched|share|shared_open|compare|recap|search|world|ref:[a-z0-9.-]{1,40})$/;
 export const MAX_PER_NAME = 200; // one batch from one visit; more is a bug or abuse
 export const MAX_NAMES = 30;
-// ponytail: a caller can still post small fake batches; add a per-address rate limit (in memory, never stored) if that shows up
+
+/** At most `max` posts a minute from one address, so one caller can't write the totals up. The addresses are held in
+ *  memory for that minute and never stored. */
+// ponytail: a fixed window (up to 2 x max across its edge), and the address is the one Cloudflare reports: a caller
+// that reaches the server around Cloudflare can name its own. Verify Cloudflare's address ranges if that shows up.
+export function rateLimit(max = 30, windowMs = 60e3, now = Date.now) {
+  let hits = new Map(), started = now();
+  return (req, res, next) => {
+    if (now() - started >= windowMs) { hits = new Map(); started = now(); }
+    const who = req.get("cf-connecting-ip") || req.ip, n = (hits.get(who) || 0) + 1;
+    hits.set(who, n);
+    if (n > max) return res.status(429).end();
+    next();
+  };
+}
 
 /** The valid [name, n] pairs of a request body; everything else is dropped. */
 export function cleanEvents(body) {

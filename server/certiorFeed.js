@@ -19,10 +19,10 @@ export function makeFeedRefresher({ token, fetchFn = fetch, now = Date.now, log 
         },
         body: JSON.stringify({ ref: "main" }),
       });
-      if (!res.ok) log.error(`[swipe-news] feed build not started: HTTP ${res.status}`);
+      if (!res.ok) log.error(`[certior] feed build not started: HTTP ${res.status}`);
       return res.ok;
     } catch (err) {
-      log.error(`[swipe-news] feed build not started: ${err.message || err}`);
+      log.error(`[certior] feed build not started: ${err.message || err}`);
       return false;
     }
   };

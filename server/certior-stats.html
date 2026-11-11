@@ -247,7 +247,7 @@
           <div class="card-head">
             <div>
               <h3>Visits per day</h3>
-              <p class="note" id="daily-note">Last 30 days. The shaded week is the one above; today is an outline because it isn’t over. Point at a day, or tab to the chart and use the arrow keys.</p>
+              <p class="note" id="daily-note">Last 30 days. The shaded week is the one above; today is an outline because it isn’t over. Point at a day, or tab to the chart and use the arrow keys. Visits from this browser are left out from now on, because it opened this page.</p>
             </div>
             <div class="key" id="daily-key">
               <span><i class="sw" style="background: var(--accent)"></i>New</span>
@@ -349,6 +349,9 @@
 <div id="tip" role="tooltip"></div>
 
 <script type="module">
+// Only the owner has the password, so this browser is the owner's: Certior (same site, same storage) stops counting it.
+// ponytail: per browser. An iPhone's Home Screen app keeps its own storage, so open this page there once as well.
+try { localStorage.setItem('owner', 'true'); } catch { /* private mode: it stays counted */ }
 const $ = (s) => document.querySelector(s);
 const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
 const svgEl = (tag, attrs = {}) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
@@ -375,7 +378,7 @@ $('#refresh').onclick = () => location.reload();      // the picked story is kep
 const getStatus = () => fetch('/api/certior/instagram-status').then((r) => (r.ok ? r.json() : { status: r.status })).catch(() => ({ status: 0 }));
 const firstStatus = getStatus();
 const feedP = fetch(`https://benjaminltakaki.github.io/certior-news/feed.json?t=${Date.now()}`).then((r) => r.json()).catch(() => null);
-const statsP = fetch('/api/swipe-news/stats').then(async (r) => (r.ok ? r.json() : Promise.reject(new Error(`the server answered ${r.status}`))));
+const statsP = fetch('/api/certior/stats').then(async (r) => (r.ok ? r.json() : Promise.reject(new Error(`the server answered ${r.status}`))));
 const insightsP = fetch('/api/certior/insights').then((r) => r.json()).catch(() => null);
 
 // ---- the numbers, as { day: { name: n } }

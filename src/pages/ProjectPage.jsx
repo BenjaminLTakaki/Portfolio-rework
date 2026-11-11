@@ -23,8 +23,8 @@ export default function ProjectPage() {
           <h1>{project.title}</h1>
           <p className="text-base text-ink-muted leading-relaxed max-w-prose">{project.summary}</p>
           <div className="flex flex-wrap gap-3 mt-7">
-            {project.id === "swipe-news" && <a href={project.url} className="action action-primary" target="_blank" rel="noreferrer">Open the app <span aria-hidden="true">↗</span></a>}
-            {project.url && project.id !== "swipe-news" && <Link to={project.url} className="action action-primary">{project.id === "lol-forecaster" ? "Try the forecaster" : "Demo status"} <span aria-hidden="true">↗</span></Link>}
+            {project.external && <a href={project.url} className="action action-primary" target="_blank" rel="noreferrer">{project.cta} <span aria-hidden="true">↗</span></a>}
+            {project.url && !project.external && <Link to={project.url} className="action action-primary">{project.cta || "Demo status"} <span aria-hidden="true">↗</span></Link>}
             {project.source && <a href={project.source} className="action" target="_blank" rel="noreferrer">View source code <span aria-hidden="true">↗</span></a>}
             {project.support && <a href={project.support} className="action" target="_blank" rel="noreferrer">Support on Ko-fi <span aria-hidden="true">↗</span></a>}
           </div>
@@ -36,7 +36,7 @@ export default function ProjectPage() {
           <section className="case-section"><p className="eyebrow mb-3">01 / The problem</p><h2>What it’s built to solve</h2><p>{project.problem}</p></section>
           <section className="case-section"><p className="eyebrow mb-3">02 / The approach</p><h2>How the pieces connect</h2><p>{project.description}</p><ol className="case-pipeline" aria-label="Project pipeline">{project.pipeline.map((step, i) => <li key={step}><span className="text-ink-muted mr-2">{String(i + 1).padStart(2, "0")}</span>{step}</li>)}</ol></section>
           <section className="case-section"><h2>Engineering decisions</h2><ul>{project.decisions.map((decision) => <li key={decision}>{decision}</li>)}</ul></section>
-          <section className="case-section case-evidence"><p className="eyebrow mb-3">03 / Evidence</p><h2>What you can inspect</h2><p>{project.evidence}</p>{project.id === "lol-forecaster" && <a className="text-link mt-4" href="/forecaster/msi_2026.json" target="_blank" rel="noreferrer">Inspect the model export ↗</a>}</section>
+          <section className="case-section case-evidence"><p className="eyebrow mb-3">03 / Evidence</p><h2>What you can inspect</h2><p>{project.evidence}</p>{project.inspect && <a className="text-link mt-4" href={project.inspect} target="_blank" rel="noreferrer">Inspect the model export ↗</a>}</section>
           <section className="case-section"><h2>Limitations & next steps</h2><p>{project.limitations}</p></section>
         </div>
         <aside aria-label="Project technical details">

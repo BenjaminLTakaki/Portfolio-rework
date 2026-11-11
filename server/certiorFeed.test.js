@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { makeFeedRefresher } from "./swipeNews.js";
+import { makeFeedRefresher } from "./certiorFeed.js";
 
 const quiet = { error() {} };
 
@@ -33,7 +33,7 @@ test("a GitHub failure is logged and never thrown", async () => {
 });
 
 test("old /swipe-news addresses redirect to /certior, query and all", async () => {
-  const { movedTo } = await import("./swipeNews.js");
+  const { movedTo } = await import("./certiorFeed.js");
   const go = (url) => { let to; movedTo("/certior")({ url }, { redirect: (code, where) => { to = [code, where]; } }); return to; };
   assert.deepEqual(go("/"), [301, "/certior/"]);
   assert.deepEqual(go("/?story=s_abc&clip=xyz&ref=instagram"), [301, "/certior/?story=s_abc&clip=xyz&ref=instagram"]);
