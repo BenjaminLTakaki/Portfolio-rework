@@ -13,3 +13,6 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      # Certior in a real browser: first visit, swiping, Compare, every tab, nothing from YouTube before opting in
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
