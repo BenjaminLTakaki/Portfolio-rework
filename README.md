@@ -13,11 +13,12 @@ npm run dev
 
 ```sh
 npm test
+npm run test:browser      # once: npx playwright install chromium
 npm run build
 npm run preview
 ```
 
-`npm test` runs Node's own test runner over the forecaster and the server (the Certior counts and Reels, the page list). GitHub Actions runs the tests and the build on every push. The production build retains a separate large graphics chunk for Three.js; essential page content renders independently of it.
+`npm test` runs Node's own test runner over the forecaster and the server (the Certior counts and Reels, the page list). `npm run test:browser` opens Certior in Chromium against a saved feed: first visit, swiping, Compare, every tab, nothing from YouTube before opting in. `npm run build` also prerenders the home page, the case studies and the privacy page into `dist/prerender` (`scripts/prerender.js`), which the server sends so they read without JavaScript. GitHub Actions runs all of it on every push. The production build retains a separate large graphics chunk for Three.js; essential page content renders independently of it.
 
 ## Routes
 

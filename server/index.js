@@ -28,7 +28,7 @@ import { makeFeedRefresher, movedTo } from "./certiorFeed.js";
 import { cleanEvents, makeStats, rateLimit, readAuth, statsAuth } from "./certiorStats.js";
 import { makePreview } from "./certiorPreview.js";
 import { makeInstagramPoster, sqlStore } from "./certiorInstagram.js";
-import { isPage, sitemap, withHead } from "./pages.js";
+import { isPage, prerendered, prerenderFile, sitemap, withHead } from "./pages.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, "..", "dist");
@@ -199,6 +199,7 @@ app.get("/sitemap.xml", (_req, res) => res.type("xml").send(sitemap()));
 
 const ASSETS = path.join(DIST_DIR, "assets") + path.sep;
 app.use(express.static(DIST_DIR, {
+  index: false,      // / goes to the page handler below, which has its prerendered HTML
   setHeaders(res, file) {
     // Vite puts a hash of the contents in every name under /assets, so those never change; a page is asked for each time
     if (file.startsWith(ASSETS)) res.set("Cache-Control", "public, max-age=31536000, immutable");
@@ -208,11 +209,16 @@ app.use(express.static(DIST_DIR, {
 
 // Any other GET gets index.html so react-router can draw the page: with 200 if the app has that page, else with 404
 // (the app then shows "Page not found"), so a search engine doesn't file every wrong address as a copy of the home page.
-let spaHtml = null;
+// The pages meant to be found are sent as prerendered HTML (scripts/prerender.js); the rest get the empty shell.
+const pageHtml = new Map();
+const readPage = async (file) => pageHtml.get(file) ?? pageHtml.set(file, await readFile(file, "utf8")).get(file);
+const SHELL = path.join(DIST_DIR, "index.html");
 app.use(async (req, res, next) => {
   if (req.method !== "GET" || req.path.startsWith("/api/")) return next();
-  spaHtml ??= await readFile(path.join(DIST_DIR, "index.html"), "utf8");
-  res.status(isPage(req.path) ? 200 : 404).set("Cache-Control", "no-cache").type("html").send(withHead(spaHtml, req.path));
+  const key = req.path.replace(/\/+$/, "") || "/";
+  const file = prerendered.includes(key) ? path.join(DIST_DIR, "prerender", prerenderFile(key)) : SHELL;
+  const html = await readPage(file).catch(() => readPage(SHELL));      // a build without the prerender step still works
+  res.status(isPage(req.path) ? 200 : 404).set("Cache-Control", "no-cache").type("html").send(withHead(html, req.path));
 });
 
 // --- Daily refresh ---------------------------------------------------------

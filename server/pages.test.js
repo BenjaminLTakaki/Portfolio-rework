@@ -9,6 +9,7 @@ test("a case study's link previews that case study; other pages keep the home pa
   assert.match(h, /<title>Certior \| Benjamin Takaki<\/title>/);
   assert.match(h, /property="og:url" content="https:\/\/www\.benjamintakaki\.com\/project\/certior"/);
   assert.equal(h.match(/content="[^"]*(Bayesian esports|selected projects)/g), null);     // both home descriptions replaced
+  assert.match(withHead(html, "/privacy"), /<title>Privacy \| Benjamin Takaki<\/title>/);
   assert.equal(withHead(html, "/forecaster"), html);
   assert.equal(withHead(html, "/project/nope"), html);
 });

@@ -12,7 +12,7 @@ export default function ProjectMark({ project, hovered = false }) {
     observer.observe(root.current);
     return () => observer.disconnect();
   }, []);
-  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;      // no window when prerendered
   return (
     <div
       ref={root}

@@ -17,14 +17,21 @@ export function isPage(path) {
   return false;
 }
 
+// The pages scripts/prerender.js renders at build time (the lazy ones, /forecaster and /lol, would render only their
+// loading line), and the file each one is kept in under dist/prerender.
+export const prerendered = listed.filter((p) => p === "/" || p === "/privacy" || p.startsWith("/project/"));
+export const prerenderFile = (path) => `${(path.replace(/\/+$/, "") || "/").replace(/\//g, "_")}.html`;
+
 const esc = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
 /** index.html with a case study's own title and description, for link previews (LinkedIn, WhatsApp): their crawlers
  *  don't run the app's script, so without this every shared case study previews as the home page. */
+const OWN_HEAD = { "/privacy": ["Privacy", "What this site collects: no cookies, no analytics, nothing beyond the host's logs."] };
 export function withHead(html, path) {
-  const p = projects.find((x) => `/project/${x.id}` === path.replace(/\/+$/, ""));
-  if (!p) return html;
-  const title = esc(`${p.title} | Benjamin Takaki`), desc = esc(p.summary), url = `${SITE}/project/${p.id}`;
+  const key = path.replace(/\/+$/, ""), p = projects.find((x) => `/project/${x.id}` === key);
+  const [name, summary] = p ? [p.title, p.summary] : OWN_HEAD[key] ?? [];
+  if (!name) return html;
+  const title = esc(`${name} | Benjamin Takaki`), desc = esc(summary), url = `${SITE}${key}`;
   const set = (attr, value) => (h) => h.replace(new RegExp(`(${attr} content=")[^"]*`), (_, a) => a + value);
   return [set('name="description"', desc), set('property="og:title"', title), set('property="og:description"', desc), set('property="og:url"', url)]
     .reduce((h, f) => f(h), html.replace(/<title>[^<]*<\/title>/, () => `<title>${title}</title>`));

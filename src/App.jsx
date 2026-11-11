@@ -4,10 +4,10 @@ import Nav from "./components/Nav";
 import Home from "./pages/Home";
 import ProjectPage from "./pages/ProjectPage";
 import SpotifyRedirect from "./pages/SpotifyRedirect";
+import Privacy from "./pages/Privacy";      // small, and prerendered with the case studies
 const Lol = lazy(() => import("./pages/Lol"));
 const LolHub = lazy(() => import("./pages/LolHub"));
 const Forecaster = lazy(() => import("./pages/Forecaster"));
-const Privacy = lazy(() => import("./pages/Privacy"));
 const SceneCanvas = lazy(() => import("./components/ProjectScene").then((module) => ({ default: module.SceneCanvas })));
 
 export default function App() {
