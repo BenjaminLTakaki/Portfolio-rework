@@ -5,13 +5,13 @@ import * as THREE from "three";
 import { cn } from "@/lib/utils";
 
 // ============================================================================
-// Constants - Earth Texture URLs (NASA Blue Marble)
+// Constants - Earth Texture URLs (NASA Blue Marble, from three-globe 2.31.0, served by this site at 2048 px)
 // ============================================================================
 
 const DEFAULT_EARTH_TEXTURE =
-  "https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg";
+  "/globe/earth.jpg";
 const DEFAULT_BUMP_TEXTURE =
-  "https://unpkg.com/three-globe@2.31.0/example/img/earth-topology.png";
+  "/globe/earth-bump.jpg";
 
 // ============================================================================
 // Utility Functions

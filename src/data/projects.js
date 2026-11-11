@@ -1,6 +1,8 @@
 export const projects = [
   {
     id: "lol-forecaster",
+    cta: "Try the forecaster",
+    inspect: "/forecaster/msi_2026.json",
     disciplines: ["AI / ML", "Full-stack"],
     problem: "How can a tournament forecast account for roster changes, regional strength, and the uncertainty of an entire bracket?",
     pipeline: ["Match history", "Player ratings", "Calibration", "Bracket simulation", "React interface"],
@@ -34,19 +36,21 @@ export const projects = [
       "Tournament forecaster for professional League of Legends. The model export contains player-derived OpenSkill strengths from 2022–2026 match data, regional offsets, and Platt-calibration parameters. Team strength combines roster ratings, a regional adjustment, and a roster-continuity discount. The React demo converts game probabilities to best-of-five series odds and simulates 20,000 eight-team double-elimination brackets in the browser.",
   },
   {
-    id: "swipe-news",
+    id: "certior",
     disciplines: ["AI / ML", "Full-stack"],
     source: "https://github.com/BenjaminLTakaki/certior-news",
     support: "https://ko-fi.com/certiornews",
     problem: "How can you see how left, center, and right outlets around the world cover the same event, without searching each one separately?",
-    pipeline: ["52 YouTube channels", "Clip filtering", "Embeddings", "Story grouping", "Swipe interface"],
-    decisions: ["Compare models on labelled real pairs before choosing one: bge-base-en-v1.5 beat bge-small on held-out labels, 90% to 77% precision and 85% to 74% recall.", "Require every pair of clips in a story to be close and share a distinctive word. Comparing clips to a story's running average let the US midterms swallow 154 clips into one story; complete-linkage clustering split them into separate events.", "Lead with what outlets choose to cover instead of how they word it: 86% of stories in a two-day sample came from a single outlet, while headlines on shared stories were mostly alike. A daily game built around comparing wording was tried and removed for that reason.", "Rank stories covered across sides and regions first, and allow at most one US domestic story in every four, because every region covers US politics and scores alone cannot hold it back.", "Fall back to TF-IDF if the embedding model cannot load, so a feed update never breaks.", "Publish a static JSON feed from GitHub Actions, so new stories need no database or redeploy, and start each build from the portfolio's own server every 10 minutes, because GitHub's schedule ran only once in 12 hours.", "Reuse one YouTube player for every clip, with a transparent layer on top that turns swipes into navigation."],
+    pipeline: ["51 YouTube channels", "Clip filtering", "Embeddings", "Story grouping", "Swipe interface"],
+    decisions: ["Compare models on labelled real pairs before choosing one: bge-base-en-v1.5 beat bge-small on held-out labels, 90% to 77% precision and 85% to 74% recall.", "Require every pair of clips in a story to be close and share a distinctive word. Comparing clips to a story's running average let the US midterms swallow 154 clips into one story; complete-linkage clustering split them into separate events.", "Lead with what outlets choose to cover instead of how they word it: 86% of stories in a two-day sample came from a single outlet, while headlines on shared stories were mostly alike. A daily game built around comparing wording was tried and removed for that reason.", "Rank stories covered across sides and regions first, and allow at most one US domestic story in every four, because every region covers US politics and scores alone cannot hold it back.", "Fall back to TF-IDF if the embedding model cannot load, so a feed update never breaks.", "Publish a static JSON feed from GitHub Actions, so new stories need no database or redeploy, and start each build from the portfolio's own server every 10 minutes, because GitHub's schedule ran only once in 12 hours.", "Reuse one YouTube player for every clip, with a transparent layer on top that turns swipes into navigation.", "Show the stories at once, as text, and ask about videos on a card over the feed instead of a full screen in front of the app: on the first day of counting, 23 first visits made 11 choices on that screen. Nothing loads from YouTube until a visitor turns videos on."],
     evidence: "The public repository includes the fetch, filter, and grouping pipeline, a threshold-tuning tool with the 200 labelled pairs, the web app, and a pytest suite that runs in CI. The tests cover clip filtering, a fixture of grouped clips, and a case where two different shootings must stay separate.",
-    limitations: "Grouping was scored on 200 deliberately hard pairs of real clips, labelled by Claude rather than an independent reviewer: with the threshold chosen on separate folds, about 90% of grouped pairs were the same event and about 85% of real matches were found. Those pairs are not a sample of the whole feed, so this is not an overall accuracy figure. Left, center, and right labels are Media Bias/Fact Check ratings of each outlet, not judgements of individual clips, and that scale fits state broadcasters outside the US poorly. Three African outlets have no rating and appear as Not rated. The US politics filter only matches title keywords. Every outlet publishes in English, which leaves out most local-language coverage, and Latin America is thinly represented. Outlets can block embedding on any clip, and the interface is designed for iPhone.",
+    limitations: "Grouping was scored on 200 deliberately hard pairs of real clips, labelled by Claude rather than an independent reviewer: with the threshold chosen on separate folds, about 90% of grouped pairs were the same event and about 85% of real matches were found. Those pairs are not a sample of the whole feed, so this is not an overall accuracy figure. Left, center, and right labels are Media Bias/Fact Check ratings of each outlet, not judgements of individual clips, and that scale fits state broadcasters outside the US poorly. Three African outlets have no rating and appear as Not rated. The US politics filter only matches title keywords. Every outlet publishes in English, which leaves out most local-language coverage, and Latin America is thinly represented. Outlets can block embedding on any clip, and the interface is designed for iPhone first: on a computer it is the same single column, with arrow keys and the headlines beside it.",
     title: "Certior",
     category: "NLP / Full-Stack",
     year: "2026",
     url: "/certior/",
+    external: true,      // a separate app, not a page of this site: a plain link in a new tab
+    cta: "Open the app",
     logo: {
       code: "CE",
       motif: "stack",
@@ -65,7 +69,7 @@ export const projects = [
       "Complete-linkage clustering to stop one event swallowing the rest",
     ],
     description:
-      "A home-screen web app for short news clips. A scheduled pipeline lists recent uploads from 52 outlets across four regions, filters out videos over five minutes, livestreams, and promos, then groups the remaining clips into stories with bge-base-en-v1.5 title embeddings. Stories are ranked by recency and by how many regions and sides covered them, and marked when one side skipped them. Tabs split the feed by topic using title keywords, and search covers every story from the last two days. A World tab shows what outlets in each country are covering, starting with stories no other outlet in the app has, and a compare view lines up every outlet's headline for a story. There are no accounts, settings stay on the device, and YouTube only loads after a visitor opts in. Swiping up moves to the next story; swiping sideways shows the same story from the left, center, or right.",
+      "A home-screen web app for short news clips. A scheduled pipeline lists recent uploads from 51 outlets across four regions, filters out videos over five minutes, livestreams, and promos, then groups the remaining clips into stories with bge-base-en-v1.5 title embeddings. Stories are ranked by recency and by how many regions and sides covered them, and marked when one side skipped them. Tabs split the feed by topic using title keywords, and search covers every story from the last two days. A World tab shows what outlets in each country are covering, starting with stories no other outlet in the app has, and a compare view lines up every outlet's headline for a story. There are no accounts, settings stay on the device, and YouTube only loads after a visitor opts in. Swiping up moves to the next story; swiping sideways shows the same story from the left, center, or right. On a computer the arrow keys do the same, and a wide window keeps every outlet's headline for the story next to the feed.",
   },
   {
     id: "guitarscribe",
@@ -263,20 +267,5 @@ export const places = [
     years: "2023 to now",
     lat: 51.4416,
     lon: 5.4697,
-  },
-];
-
-export const skills = [
-  {
-    label: "AI / ML",
-    items: ["CNN", "BiGRU", "LSTM", "TFT", "NLP", "spaCy", "RAG", "Stable Diffusion", "LLMs", "Audio DSP", "STFT / CQT"],
-  },
-  {
-    label: "Development",
-    items: ["Python", "Flask", "FastAPI", "JavaScript", "Vue", "C#", "Docker"],
-  },
-  {
-    label: "Infrastructure",
-    items: ["PostgreSQL", "SQLAlchemy", "REST / OAuth", "Git", "Render", "Heroku"],
   },
 ];

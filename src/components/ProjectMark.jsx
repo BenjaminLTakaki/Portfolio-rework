@@ -22,7 +22,7 @@ export default function ProjectMark({ project, hovered = false }) {
     >
       <div className="absolute inset-2 rounded-[calc(1.75rem-0.5rem)] bg-[linear-gradient(135deg,var(--wash),rgba(232,230,225,0.72))]" />
       <Suspense fallback={null}><ProjectView project={project} interaction={interaction} visible={visible} reduced={reduced} /></Suspense>
-      <div className="absolute bottom-5 left-5 font-mono text-[11px] uppercase tracking-[0.2em] text-ink/55">
+      <div className="absolute bottom-5 left-5 font-mono text-[12px] uppercase tracking-[0.2em] text-ink/55">
         {logo.code || project.title.slice(0, 2)}
       </div>
     </div>

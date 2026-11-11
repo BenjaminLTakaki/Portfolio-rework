@@ -64,7 +64,7 @@ export default function Lol() {
     <main id="main-content" className="pt-28 pb-24 px-6 lg:px-12 max-w-screen-xl mx-auto animate-fade-up">
       <Link
         to="/lol"
-        className="mb-14 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:text-ink"
+        className="-mt-3 mb-11 py-3 inline-flex items-center gap-2 font-mono text-[12px] uppercase tracking-[0.18em] text-ink-muted transition-colors duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:text-ink"
       >
         <span className="text-base leading-none">←</span>
         All players
@@ -72,7 +72,7 @@ export default function Lol() {
 
       {/* Header */}
       <header className="mb-16">
-        <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.26em] text-ink-muted">
+        <p className="mb-4 font-mono text-[12px] uppercase tracking-[0.26em] text-ink-muted">
           League of Legends / Ranked Solo&nbsp;&amp;&nbsp;Duo · {titleCase(player.role)}
         </p>
         <h1 className="max-w-[14ch] text-[clamp(2.4rem,6.5vw,5.6rem)] font-light tracking-[-0.055em] leading-[0.9] text-ink">
@@ -84,7 +84,7 @@ export default function Lol() {
           <span className="text-ink">{shortDate(stats.oldest.date_utc)}</span> to{" "}
           <span className="text-ink">{shortDate(stats.newest.date_utc)}</span>.
         </p>
-        <p className="mt-3 font-mono text-[11px] text-ink-faint">{player.riotId}</p>
+        <p className="mt-3 font-mono text-[12px] text-ink-faint">{player.riotId}</p>
       </header>
 
       {/* Headline stats */}
@@ -111,7 +111,7 @@ export default function Lol() {
           <span
             key={i}
             title={`${g.win ? "Win" : "Loss"} · ${g.champion} · ${shortDate(g.date_utc)}`}
-            className={`flex h-9 w-9 items-center justify-center rounded font-mono text-[11px] font-medium ${
+            className={`flex h-9 w-9 items-center justify-center rounded font-mono text-[12px] font-medium ${
               g.win ? "bg-ink text-bg" : "border border-ink/20 text-ink-muted"
             }`}
           >
@@ -144,10 +144,10 @@ export default function Lol() {
               .slice(0, 5)
               .map((s, i) => (
                 <li key={i} className="flex items-baseline justify-between gap-4 border-b border-ink/[0.08] pb-3">
-                  <span className="font-mono text-[11px] uppercase tracking-wider text-ink-muted">
+                  <span className="font-mono text-[12px] uppercase tracking-wider text-ink-muted">
                     {s.type === "WIN" ? "🔥" : "💀"} {s.length}-game {s.type.toLowerCase()} streak
                   </span>
-                  <span className="text-right font-mono text-[11px] text-ink-faint">
+                  <span className="text-right font-mono text-[12px] text-ink-faint">
                     {shortDate(s.start_date)}
                   </span>
                 </li>
@@ -163,7 +163,7 @@ export default function Lol() {
           <HourBar key={h.hour} hour={h} />
         ))}
       </div>
-      <div className="mb-10 flex flex-wrap gap-x-8 gap-y-2 font-mono text-[11px] text-ink-muted">
+      <div className="mb-10 flex flex-wrap gap-x-8 gap-y-2 font-mono text-[12px] text-ink-muted">
         {time.parts.map((p) => (
           <span key={p.label}>
             {p.label}{" "}
@@ -238,7 +238,7 @@ export default function Lol() {
             if (!list.length) return null;
             return (
               <div className="mb-20 space-y-4">
-                <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+                <p className="font-mono text-[12px] uppercase tracking-[0.22em] text-ink-faint">
                   {isJungle ? "Most-faced enemy junglers" : "Most-faced ranged tops"}
                 </p>
                 {list.map((c) => (
@@ -262,7 +262,7 @@ export default function Lol() {
             <SynergyList title="😄 Easiest enemies — you beat them most" rows={synergy.highlights.easiestEnemies} />
             <SynergyList title="💀 Hardest enemies — your nemeses" rows={synergy.highlights.hardestEnemies} />
           </div>
-          <p className="mb-20 font-mono text-[10px] leading-relaxed text-ink-faint">
+          <p className="mb-20 font-mono text-[12px] leading-relaxed text-ink-faint">
             Correlational, not causal — a champ can top the list simply for being
             strong/meta during your winning games.
           </p>
@@ -279,7 +279,7 @@ export default function Lol() {
                 <span className="font-mono text-[12px] uppercase tracking-wider text-ink">
                   {p.tier} {p.division}
                 </span>
-                <span className="font-mono text-[11px] text-ink-faint">{shortDate(p.date_utc)}</span>
+                <span className="font-mono text-[12px] text-ink-faint">{shortDate(p.date_utc)}</span>
               </li>
             ))}
           </ol>
@@ -287,7 +287,7 @@ export default function Lol() {
       )}
 
       <div className="h-px bg-ink/[0.07] my-12" />
-      <p className="font-mono text-[11px] text-ink-faint">
+      <p className="font-mono text-[12px] text-ink-faint">
         Data via the Riot Games API · refreshed daily. This site isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing Riot Games properties. Riot Games, and all associated properties are trademarks or registered trademarks of Riot Games, Inc.
       </p>
     </main>
@@ -299,7 +299,7 @@ export default function Lol() {
 function Centered({ children }) {
   return (
     <main id="main-content" className="flex h-screen items-center justify-center px-6">
-      <p className="font-mono text-[11px] uppercase tracking-widest text-ink-muted text-center">
+      <p className="font-mono text-[12px] uppercase tracking-widest text-ink-muted text-center">
         {children}
       </p>
     </main>
@@ -308,7 +308,7 @@ function Centered({ children }) {
 
 function SectionLabel({ children }) {
   return (
-    <p className="mb-6 font-mono text-[11px] uppercase tracking-[0.22em] text-ink-faint">
+    <p className="mb-6 font-mono text-[12px] uppercase tracking-[0.22em] text-ink-faint">
       {children}
     </p>
   );
@@ -317,11 +317,11 @@ function SectionLabel({ children }) {
 function Stat({ label, value, sub }) {
   return (
     <div className="bg-bg p-6">
-      <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">{label}</p>
+      <p className="font-mono text-[12px] uppercase tracking-[0.2em] text-ink-faint">{label}</p>
       <p className="mt-3 text-[clamp(1.4rem,3vw,2rem)] font-light tracking-tight text-ink leading-none">
         {value}
       </p>
-      {sub && <p className="mt-2 font-mono text-[11px] text-ink-muted">{sub}</p>}
+      {sub && <p className="mt-2 font-mono text-[12px] text-ink-muted">{sub}</p>}
     </div>
   );
 }
@@ -331,7 +331,7 @@ function BarRow({ label, winrate, games, max }) {
     <div>
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
         <span className="text-sm text-ink">{label}</span>
-        <span className="font-mono text-[11px] text-ink-muted">
+        <span className="font-mono text-[12px] text-ink-muted">
           {games}g · <span className="text-ink">{winrate.toFixed(0)}%</span>
         </span>
       </div>
@@ -349,7 +349,7 @@ function SynergyList({ title, rows }) {
   if (!rows || rows.length === 0) return null;
   return (
     <div>
-      <p className="mb-4 font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+      <p className="mb-4 font-mono text-[12px] uppercase tracking-[0.22em] text-ink-faint">
         {title}
       </p>
       <ul className="space-y-2.5">
@@ -359,7 +359,7 @@ function SynergyList({ title, rows }) {
             className="flex items-baseline justify-between gap-4 border-b border-ink/[0.08] pb-2"
           >
             <span className="text-sm text-ink">{r.champion}</span>
-            <span className="font-mono text-[11px] text-ink-muted">
+            <span className="font-mono text-[12px] text-ink-muted">
               <span className="text-ink">{r.winrate.toFixed(0)}%</span>{" "}
               <span className="text-ink-faint">
                 ({r.wins}/{r.games})

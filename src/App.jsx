@@ -7,6 +7,7 @@ import SpotifyRedirect from "./pages/SpotifyRedirect";
 const Lol = lazy(() => import("./pages/Lol"));
 const LolHub = lazy(() => import("./pages/LolHub"));
 const Forecaster = lazy(() => import("./pages/Forecaster"));
+const Privacy = lazy(() => import("./pages/Privacy"));
 const SceneCanvas = lazy(() => import("./components/ProjectScene").then((module) => ({ default: module.SceneCanvas })));
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="/lol" element={<LolHub />} />
         <Route path="/lol/:player" element={<Lol />} />
         <Route path="/forecaster" element={<Forecaster />} />
+        <Route path="/privacy" element={<Privacy />} />
         <Route path="*" element={<main id="main-content" className="page-container pt-32"><h1 className="text-4xl font-light tracking-tight">Page not found.</h1><Link className="action mt-8" to="/#work">Explore the projects →</Link></main>} />
       </Routes>
       </Suspense>
