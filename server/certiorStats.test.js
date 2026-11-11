@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { cleanEvents, makeStats, rateLimit, readAuth, statsAuth } from "./swipeNewsStats.js";
-import { makePreview, withPreview } from "./swipeNewsPreview.js";
+import { cleanEvents, makeStats, rateLimit, readAuth, statsAuth } from "./certiorStats.js";
+import { makePreview, withPreview } from "./certiorPreview.js";
 
 // --- anonymous counts --------------------------------------------------------
 

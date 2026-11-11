@@ -7,9 +7,9 @@
 //       GET /api/health         -> { ok } (can the database be reached)
 //   - Run a daily node-cron job that incrementally refreshes data from the
 //     Riot API into Neon — keeping the dashboard current without a redeploy.
-//   - Certior (the news app, built in the swipe-news repo, formerly Swipe News) at /certior:
-//       start its feed build every 10 minutes (swipeNews.js), keep anonymous daily usage totals and show them at
-//       /certior-stats (swipeNewsStats.js), and give shared story links a preview of that story (swipeNewsPreview.js).
+//   - Certior (the news app, built in the certior-news repo, formerly Swipe News) at /certior:
+//       start its feed build every 10 minutes (certiorFeed.js), keep anonymous daily usage totals and show them at
+//       /certior-stats (certiorStats.js), and give shared story links a preview of that story (certiorPreview.js).
 //       Old /swipe-news addresses redirect to /certior. Posts the day's card to Instagram (certiorInstagram.js).
 
 import "dotenv/config";
@@ -24,9 +24,9 @@ import cron from "node-cron";
 import { sql, ensureSchema, getMatches, getRoleMatchups, getMatchTeams } from "./db.js";
 import { refreshFromRiot } from "./riot.js";
 import { PLAYERS, publicPlayer } from "./players.js";
-import { makeFeedRefresher, movedTo } from "./swipeNews.js";
-import { cleanEvents, makeStats, rateLimit, readAuth, statsAuth } from "./swipeNewsStats.js";
-import { makePreview } from "./swipeNewsPreview.js";
+import { makeFeedRefresher, movedTo } from "./certiorFeed.js";
+import { cleanEvents, makeStats, rateLimit, readAuth, statsAuth } from "./certiorStats.js";
+import { makePreview } from "./certiorPreview.js";
 import { makeInstagramPoster, sqlStore } from "./certiorInstagram.js";
 import { isPage, sitemap, withHead } from "./pages.js";
 
@@ -101,23 +101,25 @@ app.get("/swipe-news-stats", (_req, res) => res.redirect(301, "/certior-stats"))
 app.get("/project/swipe-news", (_req, res) => res.redirect(301, "/project/certior"));
 
 // Anonymous daily totals: the app posts a small batch of counts when you leave it (sendBeacon).
+// The /api/swipe-news paths stay as aliases: a phone can still run an app cached before the rename, and the MCP
+// (mcp/certior.mjs) reads the old path until this version is deployed. The table keeps its old name.
 const stats = makeStats(sql);
-app.post("/api/swipe-news/events", rateLimit(), express.json({ limit: "4kb", type: () => true }), async (req, res) => {
+app.post(["/api/certior/events", "/api/swipe-news/events"], rateLimit(), express.json({ limit: "4kb", type: () => true }), async (req, res) => {
   const events = cleanEvents(req.body);
   res.status(204).end();
-  if (events.length) await stats.record(events).catch((err) => console.error("[swipe-news] counts not saved:", err.message || err));
+  if (events.length) await stats.record(events).catch((err) => console.error("[certior] counts not saved:", err.message || err));
 });
 const statsGate = statsAuth(process.env.SWIPE_STATS_PASSWORD);
 // the numbers, for the password or the read-only key Claude's MCP uses (mcp/certior.mjs): reading only, never posting
 const readGate = readAuth(process.env.CERTIOR_READ_TOKEN, statsGate);
-app.get("/api/swipe-news/stats", readGate, async (_req, res) => {
+app.get(["/api/certior/stats", "/api/swipe-news/stats"], readGate, async (_req, res) => {
   try {
     res.json({ rows: await stats.rows(60) });
   } catch (err) {
     res.status(500).json({ error: String(err.message || err) });
   }
 });
-app.get("/certior-stats", statsGate, (_req, res) => res.sendFile(path.join(__dirname, "swipe-news-stats.html")));
+app.get("/certior-stats", statsGate, (_req, res) => res.sendFile(path.join(__dirname, "certior-stats.html")));
 
 // A story as a Reel, posted to Instagram only when you press the button on /certior-stats (token in IG_ACCESS_TOKEN;
 // without it this does nothing), as many a day as you like.

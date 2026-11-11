@@ -54,7 +54,7 @@ export function makePreview({ readIndex, fetchFn = fetch, now = Date.now, ttlMs 
       if (!story) return next();
       res.type("html").set("Cache-Control", "no-cache").send(withPreview(await readIndex(), story, clipId));
     } catch (err) {
-      log.error(`[swipe-news] link preview skipped: ${err.message || err}`);
+      log.error(`[certior] link preview skipped: ${err.message || err}`);
       next();      // the plain page still works
     }
   };

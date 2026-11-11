@@ -1,11 +1,11 @@
-// Certior (built in the swipe-news repo) — one story per screen. Swipe up/down = next/previous story,
+// Certior (built in the certior-news repo) — one story per screen. Swipe up/down = next/previous story,
 // swipe left/right = the same story from another outlet.
 // One YouTube player is reused for every clip and laid over the active clip's video area.
 
 import { storyCard } from './card.js';
 
 const params = new URLSearchParams(location.search);
-// ponytail: copied from the swipe-news repo's docs/; Actions publishes the feed to GitHub Pages, so new stories need no Render deploy
+// ponytail: copied from the certior-news repo's docs/; Actions publishes the feed to GitHub Pages, so new stories need no Render deploy
 const LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);   // ?feed= and ?debug are for testing: on the live site a link must not be able to swap the feed or load a script
 const FEED_URL = (LOCAL && params.get('feed')) || 'https://benjaminltakaki.github.io/certior-news/feed.json';
 const TOPICS = { all: 'All News', politics: 'Politics', business: 'Business', tech: 'Tech', science: 'Science & Health', crime: 'Crime', disasters: 'Disasters', culture: 'Culture', sports: 'Sports' };
@@ -102,7 +102,7 @@ const dayKey = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
 // Anonymous daily totals for the stats page: only counts like { visit: 1, watched_left: 3 }, no cookies, IDs or
 // addresses (see Privacy). Sent as one small batch when you leave the app. Where there's no endpoint (GitHub Pages,
 // a local copy) the send just fails.
-const STATS_URL = '/api/swipe-news/events';
+const STATS_URL = '/api/certior/events';
 const tally = {};
 const count = (name, n = 1) => { tally[name] = (tally[name] || 0) + n; };
 function sendCounts() {
